@@ -312,3 +312,141 @@ afterward), plus the interactive Browser pane for exploratory testing:
 `npm run typecheck`, `npm run lint` (0 errors, 9 pre-existing-style `no-console` warnings across
 one-off `.mjs` scripts), `npm test` (12 files, **191 tests**), and `npm run build` all pass clean.
 No git commit made, per instructions.
+
+## Fix-up
+
+Four layout fixes from the design lead's review of `m8-title.png`/`m8-phone.png`/`m8-settings.png`,
+against `docs/ART_BIBLE.md` section 8. Not committed, per instructions.
+
+### 1. Phone touch controls (`src/render/touchControls.ts`, new; `index.html`; `scenes/play.ts`)
+
+Pre-fix-up, the on-screen d-pad was drawn *inside* the canvas's own bottom HUD band at a fixed
+logical position regardless of viewport shape, so on a tall portrait phone it sat in the same
+624x720 letterboxed rectangle as the lives icons and start bank instead of using the ~380px of
+empty page below the (width-scaled) canvas.
+
+Picked the DOM-overlay option the spec offered rather than extending the canvas's own logical
+height: `CANVAS_WIDTH`/`CANVAS_HEIGHT` are load-bearing constants across the grid/physics/HUD code
+(`ARCHITECTURE.md` section 3), so changing them for touch layouts only would have rippled through
+row math everywhere; a sibling DOM layer needed nothing from that code at all.
+
+- **`index.html`**: `#app` now top-aligns the canvas (`align-items: flex-start`, was `center`) so
+  any free vertical space collects entirely *below* it, where the overlay needs it - invisible on
+  desktop/landscape, where the canvas already fills almost the full viewport height (scale is
+  height-bound there, not width-bound).
+- **`render/touchControls.ts`** (new): `BelowCanvasTouchControls`, one per `PlayScene`. Measures
+  `window.innerHeight - canvas.getBoundingClientRect().bottom` on mount and on `resize`; at >=150
+  CSS px it renders four real `<button>` elements (64px, plus/cross layout: up top-centre,
+  left/down/right in a row) plus a 64px pause button to its right, centred horizontally, vertically
+  centred in the free space. Below 150px it tears the DOM down entirely and `scenes/play.ts` falls
+  back to its own canvas-drawn overlay instead (see item 2). Real DOM buttons sitting outside the
+  canvas need none of `core/input.ts`'s coordinate-mapping/touch-exclusion bookkeeping - they're
+  never seen by the swipe/tap listener, which is attached only to the canvas element
+  (`attachInput(canvas)` in `main.ts`) - so a tap just fires a plain `click` handler calling
+  `world.queueHop`/`openPause` directly. The one thing they *do* need from the input system is the
+  same `isTopInputOwner` guard every other raw listener uses, so a tap is ignored while Pause/
+  Settings/a level-intro card covers Play; since `core/loop.ts` stops updating/rendering Play
+  entirely once something's pushed on top of it (there's no per-frame hook left to react to that), a
+  small dedicated `requestAnimationFrame` poll hides/shows the whole overlay independently of the
+  game loop, purely off `isTopInputOwner`. Verified interactively (covered scene hides the overlay,
+  uncovering it restores it) and via `scripts/m8fix-phone.mjs` below.
+- **`scenes/play.ts`**: `setupTouchButtons()` now only builds the canvas-drawn fallback when
+  `touchOverlay.active` is false; `update()` polls `touchOverlay.active` (can flip live on resize/
+  rotation) alongside the pre-existing on-screen-d-pad-setting poll, rebuilding whichever side owns
+  the buttons. `BelowCanvasTouchControls.setDpadEnabled` mirrors Settings' on-screen-d-pad toggle
+  (the pause button stays up either way, same as the canvas fallback's own always-on pause button).
+
+Reduce-motion has no effect on any of this, as specced (no animation moved).
+
+### 2. Pause button, canvas-drawn fallback (`scenes/play.ts`)
+
+The pre-fix-up pause button (`x: CANVAS_WIDTH-42, y: 40, w: 36, h: 36`) sat mostly in the HUD's top
+band but bled 28px into the home row (row 1, y 48-96) underneath it - real gameplay space, not HUD
+chrome. Moved into the HUD top band properly (row 0, y 0-48): 32px (down from 36), centred at
+`CANVAS_WIDTH - 146` - measured clearance from both the centred world/level-name text and the
+right-aligned "HI `<score>`" text at every world name in `game/themes.ts` (`Coastal Highway` is the
+longest). Also changed its visibility condition from `isTouchCapable()` (a device-capability check)
+to `getLastInputDevice() === 'touch'` (M8's own last-input tracking, the same signal
+`render/ui.ts`'s `actionHint` already uses) - a touch-capable-but-mouse-driven session (a hybrid
+touchscreen laptop) no longer shows a touch-only control it isn't using. This on-canvas fallback
+only exists at all when `render/touchControls.ts`'s below-canvas overlay isn't active (item 1) -
+landscape phones and desktop, hence "on desktop or overlay layouts" in the spec's own wording.
+
+The on-canvas d-pad (same fallback path) also shrank to 48px (from 56) and moved to sit over the
+start bank's left third (`centerX = 100`, within the `0..CANVAS_WIDTH/3 = 0..208` band), anchored
+so its cluster's bottom edge lands exactly on `CANVAS_HEIGHT - TILE` (the top of the HUD bottom
+row) rather than bleeding into it - the row the lives icons and timer bar both live in, so this
+guarantees zero overlap with either regardless of lives count (pre-fix-up, a 5th life icon and the
+d-pad's left button could occupy the same pixels - see "Deviations" #4's own account of the
+tradeoff this replaces).
+
+### 3. Title spacing (`scenes/title.ts`)
+
+**Hero/Start gap**: `buildLayout`'s `buttonsY` was a fixed `bankY + bankH + 28` regardless of the
+hero sprite's own measured extent, which (at this build's actual Fredoka metrics) put Start's top
+edge *inside* the hero's own feet, not just close to them. `buttonsY` is now
+`heroCy + HERO_FEET_OFFSET_PX + 24`, clamped between that original fixed-gap floor and a ceiling
+that keeps the hi-score/prompt text at least 16px above the canvas's own bottom edge (`CANVAS_HEIGHT`
+is 720; there's ~65px of spare room at today's metrics, so the ceiling doesn't currently bind).
+`HERO_FEET_OFFSET_PX` is derived from `frog-idle.svg`'s own 48x48 viewBox (the back feet's toe
+circles bottom out around local y=47, `anchor: 'center'` places the sprite's own centre at local
+y=24), scaled by `HERO_SCALE`, with `frogIdleBreath`'s +-2% idle oscillation folded in as a flat
+1.02 safety margin rather than recomputed every frame. Measured against the real rendered canvas
+(scanning pixel data for the hero's own three green tones, see "How this was verified" below): 29px
+of actual gap between the hero's lowest frog-coloured pixel and Start's top edge - comfortably past
+the 24px minimum, not excessively past it.
+
+**"Tap for sound" hint**: moved from the HUD's top-left corner (where it overlapped the logo's
+peeking frog - `drawLogoFrogPeek`, both live around the same x/y) to the top-right, via a new
+`corner` option on `draw/hud.ts`'s `drawAudioHint` (`'top-left'` default, unchanged for `scenes/
+play.ts`'s own HUD hint, which was never the problem; `'top-right'` for Title only). Still hidden
+once `audio.hasStarted()` - no change to that condition, only to where it's drawn while visible.
+
+### 4. Settings CONTROLS label (`scenes/settings.ts`)
+
+Was `theme.palette.accentB`, which for world 1 (Settings always renders on world 1's theme, same as
+Title) is `#FF6B6B` - visually indistinguishable from `danger` (`#FF4D4D`, `ART_BIBLE.md` section 3),
+which the bible reserves for the timer and death flash only. Changed to `rgba(27, 42, 29, 0.7)` -
+`ink` (`#1B2A1D`) at 70% alpha, matching the same hardcoded-ink-with-alpha pattern already used
+elsewhere in the kit (`render/ui.ts`'s toggle track, `title.ts`'s toast background).
+
+## How the fix-up was verified
+
+1. **The interactive Browser pane**, driving real dispatched `MouseEvent`/`TouchEvent`s (including
+   synthetic `Touch`/`TouchEvent` construction for the below-canvas DOM buttons, since they're
+   outside the canvas the pre-existing scripts' logical-coordinate helpers target) at both a desktop
+   viewport and the 375x812 viewport the spec names directly: confirmed the below-canvas overlay
+   mounts and its buttons hop the frog (`window.__rr.world.frog.row` changed on click), confirmed it
+   hides while `PauseScene` covers `PlayScene` and reappears on resume, confirmed toggling
+   Settings' on-screen-d-pad off hides just the d-pad half of the overlay (pause stays), and
+   confirmed the canvas-drawn fallback's pause button appears only after a touch-like input and
+   opens `PauseScene` correctly.
+2. **Pixel measurement**: a throwaway script rendered the Title, read the canvas's own backing
+   pixel data, and scanned for the hero sprite's own three green tones to find its true lowest
+   visible pixel, compared against `window.__rr.ui.current`'s own `start` control rect - 29px of
+   gap (see item 3).
+3. **`node scripts/m8fix-screens.mjs`**: `docs/screens/m8fix-title.png`, `m8fix-settings.png` -
+   desktop, dev-hook-driven navigation exactly like the pre-fix-up `m8-screens.mjs`. Zero console
+   errors.
+4. **`node scripts/m8fix-phone.mjs`**: `docs/screens/m8fix-phone.png` - the Playwright "iPhone 12"
+   descriptor (390x664, per "Deviations" #6), taps Start and the level-1 intro card via the
+   existing logical-coordinate helper, then confirms the below-canvas overlay actually mounted
+   (`page.locator('.rr-touch-wrap').isVisible()`, throwing loudly rather than silently screenshotting
+   an empty result if it hadn't) before driving a short heuristic playthrough - adapted from
+   `scripts/m8-phone.mjs`'s own bot, but tapping the real DOM button elements' own bounding boxes
+   via `page.touchscreen.tap` rather than a hand-computed logical-space rect table, since these
+   buttons no longer live in logical canvas space at all. 15 hops, score 420, zero console errors;
+   the captured screenshot shows the d-pad mid-play with a `+10` hop popup still visible.
+5. **`node scripts/review.mjs --secs 10`** against the reviewer's own port 5173 (never stopped or
+   reconfigured, confirmed listening before and after via `netstat`) - starts from the Title via a
+   real `Enter` keypress, plays, zero console errors; `docs/screens/review/title.png` from this same
+   run shows the reviewer's own dev server (Vite HMR) already serving the fix-up's Title changes.
+
+Runtime verification otherwise used a second dev server on port 5174 (`npm run dev -- --port 5174
+--strictPort`), stopped by PID before finishing (`netstat` confirmed only the reviewer's own 5173
+remained listening afterward).
+
+`npm run typecheck`, `npm run lint` (0 errors; the same 9 pre-existing-style `no-console` warnings
+plus the same pattern in the two new `m8fix-*.mjs` scripts, 11 total), `npm test` (12 files, 191
+tests, unchanged - none of the fix-up touches anything under unit test), and `npm run build` all
+pass clean. No git commit made, per instructions.

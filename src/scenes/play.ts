@@ -2,6 +2,7 @@ import type { Scene, SceneManager } from '../core/loop';
 import * as audio from '../core/audio';
 import { gameEvents } from '../core/events';
 import {
+  getLastInputDevice,
   isTopInputOwner,
   isTouchCapable,
   popInputOwner,
@@ -45,6 +46,7 @@ import { drawWeather, updateWeather } from '../render/draw/weather';
 import { createBlinkState, tickBlink, type BlinkState } from '../render/anim';
 import { drawPlatformContactShadows, drawWaterAnimated } from '../render/draw/water';
 import { clientToLogical, drawTouchButton, inRect, setPageVignette, type Rect } from '../render/ui';
+import { BelowCanvasTouchControls } from '../render/touchControls';
 import { GameOverScene } from './gameOver';
 import { LevelIntroScene } from './levelIntro';
 import { PauseScene } from './pause';
@@ -91,9 +93,20 @@ export class PlayScene implements Scene {
   private onLevelJumpKey: ((e: KeyboardEvent) => void) | null = null;
   private pendingResults: PendingResults | null = null;
   private lastOnScreenDpadSetting = false;
+  // M8 fix-up spec item 1: recomputed every `update()` tick (cheap - a couple of comparisons)
+  // alongside the on-screen-d-pad-setting poll above, since both can flip the *set* of on-canvas
+  // touch buttons `setupTouchButtons()` needs to (re)build.
+  private lastOverlayActive = false;
+  private lastShowPauseOnCanvas = false;
 
-  // --- Touch: on-screen d-pad (default on for touch devices, toggle in Settings) and pause
-  // button (M8 spec section 3) ---
+  // --- Touch: below-canvas d-pad/pause overlay (M8 fix-up spec item 1) when there's enough free
+  // space under the canvas for it; otherwise the pre-existing on-canvas overlay below, shrunk and
+  // repositioned (M8 fix-up spec items 1-2) ---
+  private touchOverlay: BelowCanvasTouchControls | null = null;
+
+  // --- Touch: on-canvas d-pad/pause fallback (default on for touch devices, toggle in Settings) -
+  // only populated when `touchOverlay` isn't active (M8 spec section 3, M8 fix-up spec items 1-2)
+  // ---
   private touchButtons: TouchButtonDef[] = [];
   private pressedTouchButton: string | null = null;
   private touchHitTest = (x: number, y: number): boolean =>
@@ -198,7 +211,19 @@ export class PlayScene implements Scene {
     if (canvas instanceof HTMLCanvasElement) {
       canvas.addEventListener('touchstart', this.onTouchStartRaw, { passive: true });
       canvas.addEventListener('touchend', this.onTouchEndRaw, { passive: true });
+      // M8 fix-up spec item 1: a below-canvas DOM d-pad/pause overlay, used instead of the
+      // on-canvas one whenever there's enough free space under the canvas for it - gated on touch
+      // capability up front, same as the on-canvas fallback's own default-on setting.
+      if (isTouchCapable()) {
+        this.touchOverlay = new BelowCanvasTouchControls(canvas, this, {
+          onHop: (dir) => this.world.queueHop(dir),
+          onPause: () => this.openPause(),
+        });
+        this.touchOverlay.setDpadEnabled(this.save.settings.onScreenDpad);
+        this.touchOverlay.mount();
+      }
     }
+    this.setupTouchButtons();
     // Show the level intro card immediately (docs/specs/M6-worlds.md section 7) rather than
     // waiting a frame for `update()` to notice the level number - avoids a one-frame flash of
     // interactive play before the card appears.
@@ -220,6 +245,8 @@ export class PlayScene implements Scene {
       canvas.removeEventListener('touchstart', this.onTouchStartRaw);
       canvas.removeEventListener('touchend', this.onTouchEndRaw);
     }
+    this.touchOverlay?.unmount();
+    this.touchOverlay = null;
     // The run's furthest level reached, for Endless's lock (M8 spec section 1) - recorded here
     // (not only on Game Over) so quitting to Title mid-run via Pause still counts it.
     recordBestLevel(this.save, this.world.levelNumber);
@@ -237,23 +264,44 @@ export class PlayScene implements Scene {
     return this.world.level.world;
   }
 
+  /** (Re)builds the on-canvas fallback touch buttons - only used when `this.touchOverlay` isn't
+   * active (M8 fix-up spec item 1: not enough free space below the canvas for the DOM overlay,
+   * e.g. landscape phones and desktop). Called whenever anything that changes *which* buttons
+   * should exist changes: the on-screen-d-pad setting, `touchOverlay.active` itself (a window
+   * resize/orientation change can flip it live), or the pause button's own visibility condition -
+   * see `update()`'s poll below. */
   private setupTouchButtons(): void {
     this.touchButtons = [];
-    // A compact plus/cross cluster (not a single row) so it clears both the HUD's lives icons
-    // (bottom-left) and its timer bar (bottom-right) - see docs/specs/M8-report.md "Deviations"
-    // for why a single 4-wide row (the spec's own literal "in the bottom HUD band" reading)
-    // turned out to overlap the lives icons in practice.
-    const dpadBtn = 56;
-    const gap = 6;
-    const bottomRowY = CANVAS_HEIGHT - dpadBtn - 4;
-    const topRowY = bottomRowY - dpadBtn - gap;
-    const centerX = 200;
+    if (this.touchOverlay?.active) return; // the DOM overlay owns both controls instead
+
+    // M8 fix-up spec items 1-2: shrunk to 48px (from 56) and moved so the cluster never covers the
+    // HUD's lives icons or timer bar (both live in the HUD bottom row, y >= CANVAS_HEIGHT - TILE) -
+    // anchored to the *top* of that row instead of bleeding into it, over the start bank's left
+    // third (a plus/cross cluster, same shape as before - docs/specs/M8-report.md "Deviations" #4
+    // on why a single row doesn't work).
     if (this.save.settings.onScreenDpad) {
+      const dpadBtn = 48;
+      const gap = 6;
+      const bottomRowY = CANVAS_HEIGHT - TILE - dpadBtn; // sits exactly on the start bank row
+      const topRowY = bottomRowY - dpadBtn - gap;
+      const centerX = 100; // within the start bank's left third (0..CANVAS_WIDTH/3 = 0..208)
       const dirs: { id: string; dir: Dir; glyph: string; x: number; y: number }[] = [
         { id: 'dpadUp', dir: 'up', glyph: '▲', x: centerX - dpadBtn / 2, y: topRowY },
-        { id: 'dpadLeft', dir: 'left', glyph: '◀', x: centerX - dpadBtn * 1.5 - gap, y: bottomRowY },
+        {
+          id: 'dpadLeft',
+          dir: 'left',
+          glyph: '◀',
+          x: centerX - dpadBtn * 1.5 - gap,
+          y: bottomRowY,
+        },
         { id: 'dpadDown', dir: 'down', glyph: '▼', x: centerX - dpadBtn / 2, y: bottomRowY },
-        { id: 'dpadRight', dir: 'right', glyph: '▶', x: centerX + dpadBtn / 2 + gap, y: bottomRowY },
+        {
+          id: 'dpadRight',
+          dir: 'right',
+          glyph: '▶',
+          x: centerX + dpadBtn / 2 + gap,
+          y: bottomRowY,
+        },
       ];
       dirs.forEach((d) => {
         this.touchButtons.push({
@@ -265,14 +313,18 @@ export class PlayScene implements Scene {
         });
       });
     }
-    if (isTouchCapable()) {
-      // Sits just below the HUD top row's right-aligned "HI <score>" text (topY ~26, size 18) so
-      // the two don't overlap - the HUD text itself never moves for a touch device, so the button
-      // has to be the one to get out of its way.
+    // M8 fix-up spec item 2: never inside the home row (row 1, y 48..96) - lives in the HUD *top*
+    // band instead (row 0, y 0..48), between the level-name text (centred) and the right-aligned
+    // "HI <score>" text, 32px (down from 36), and only drawn while the last input was actually
+    // touch (not just "the device is touch-capable", the pre-fix-up condition) so it doesn't
+    // clutter a hybrid touchscreen laptop being driven by mouse/keyboard.
+    if (getLastInputDevice() === 'touch') {
+      const topY = TILE * 0.55; // matches draw/hud.ts's own HUD-top-row text baseline
+      const size = 32;
       this.touchButtons.push({
         id: 'pauseBtn',
         glyph: '⏸',
-        rect: { x: CANVAS_WIDTH - 42, y: 40, w: 36, h: 36 },
+        rect: { x: CANVAS_WIDTH - 146 - size / 2, y: topY - size / 2, w: size, h: size },
         onPress: () => this.openPause(),
       });
     }
@@ -335,6 +387,21 @@ export class PlayScene implements Scene {
       // Settings (opened from Pause) may have flipped the on-screen d-pad toggle mid-run -
       // rebuild the touch-button set (and its touch-exclusion hit test) once gameplay resumes.
       this.lastOnScreenDpadSetting = this.save.settings.onScreenDpad;
+      this.touchOverlay?.setDpadEnabled(this.save.settings.onScreenDpad);
+      this.setupTouchButtons();
+    }
+    // M8 fix-up spec items 1-2: `touchOverlay.active` can flip live (a window resize/orientation
+    // change crossing the free-space threshold), and the on-canvas pause button's own visibility
+    // depends on `getLastInputDevice()`, which changes on ordinary play (first touch). Both are
+    // cheap to poll every tick; only rebuild the on-canvas button set when either actually changed.
+    const overlayActive = this.touchOverlay?.active ?? false;
+    const showPauseOnCanvas = !overlayActive && getLastInputDevice() === 'touch';
+    if (
+      overlayActive !== this.lastOverlayActive ||
+      showPauseOnCanvas !== this.lastShowPauseOnCanvas
+    ) {
+      this.lastOverlayActive = overlayActive;
+      this.lastShowPauseOnCanvas = showPauseOnCanvas;
       this.setupTouchButtons();
     }
     this.world.update(dt);
@@ -361,7 +428,14 @@ export class PlayScene implements Scene {
         const pr = this.pendingResults;
         this.pendingResults = null;
         this.scenes.push(
-          new ResultsScene(this.scenes, this, this.world, pr.clearedLevel, pr.oldWorldTheme, pr.timeBonusTotal),
+          new ResultsScene(
+            this.scenes,
+            this,
+            this.world,
+            pr.clearedLevel,
+            pr.oldWorldTheme,
+            pr.timeBonusTotal,
+          ),
         );
       } else {
         this.scenes.push(

@@ -50,6 +50,19 @@ const LOGO_EXTRUDE_PX = 5;
 const HERO_SCALE = 3;
 const LOGO_FROG_SCALE = 1.5;
 
+// M8 fix-up spec item 3: at least this much gap between the hero's lowest point (its feet) and
+// the top of the Start button, and at least this much between the hi-score/prompt text and the
+// canvas's own bottom edge - both in logical (624x720) px, the same space every other measurement
+// in this file's layout already uses.
+const HERO_START_GAP_PX = 24;
+const SCREEN_BOTTOM_MARGIN_PX = 16;
+// frog-idle.svg's 48x48 viewBox has its lowest visible point - the back feet's toe circles, cy
+// 45.2/45.4 r 1.6 - at local y ~= 47; local y = 24 is the viewBox's own vertical centre, which is
+// where `drawSpriteImage`'s `anchor: 'center'` places `heroCy` below. `frogIdleBreath`'s own idle
+// scale oscillation is a further +-2%; folded in here as safety margin rather than recomputed
+// every frame, since 2% of the hero's own height is under 3px either way.
+const HERO_FEET_OFFSET_PX = HERO_SCALE * TILE * ((47 - 24) / 48) * 1.02;
+
 interface LogoLayout {
   canvas: HTMLCanvasElement;
   /** Logical px - already in the same coordinate space as the renderer's ctx. */
@@ -182,7 +195,28 @@ function buildLayout(logoHeight: number): TitleLayout {
   const buttonW = 320;
   const buttonH = 46;
   const buttonGap = 12;
-  const buttonsY = bankY + bankH + 28;
+  const heroCy = bankY + bankH * 0.72;
+
+  // M8 fix-up spec item 3: the button stack (and the hi-score/prompt text below it) moves down
+  // using the canvas's own free space at the bottom, rather than sitting a fixed distance below
+  // the grass bank - pre-fix-up, that fixed 28px gap put Start's top edge *above* the hero's own
+  // feet (heroBottomY below) on the logo/font metrics this actually measures at, i.e. overlapping.
+  const heroBottomY = heroCy + HERO_FEET_OFFSET_PX;
+  const contentH = 5 * buttonH + 4 * buttonGap; // the five-button stack's own height
+  const hiScoreOffset = 26; // hi-score sits this far below the stack
+  const hintOffset = 56; // the prompt hint sits this far below the stack
+  const hintHalfHeight = 8; // ~half the 15px hint text's own line height
+
+  const desiredButtonsY = heroBottomY + HERO_START_GAP_PX;
+  // Never push the whole stack far enough that the hint text would end up closer than
+  // SCREEN_BOTTOM_MARGIN_PX to the canvas's bottom edge; never pull it back above the pre-fix-up
+  // minimum gap from the bank either (defensive floor - unreachable at today's logo metrics, but
+  // keeps this correct if the font/logo height ever changes).
+  const maxButtonsY =
+    CANVAS_HEIGHT - SCREEN_BOTTOM_MARGIN_PX - hintHalfHeight - hintOffset - contentH;
+  const minButtonsY = bankY + bankH + 28;
+  const buttonsY = Math.max(minButtonsY, Math.min(desiredButtonsY, maxButtonsY));
+
   return {
     logoY,
     riverY,
@@ -191,14 +225,14 @@ function buildLayout(logoHeight: number): TitleLayout {
     roadH,
     bankY,
     bankH,
-    heroCy: bankY + bankH * 0.72,
+    heroCy,
     buttonsY,
     buttonW,
     buttonH,
     buttonGap,
     buttonX: (CANVAS_WIDTH - buttonW) / 2,
-    hiScoreY: buttonsY + 5 * buttonH + 4 * buttonGap + 26,
-    hintY: buttonsY + 5 * buttonH + 4 * buttonGap + 56,
+    hiScoreY: buttonsY + contentH + hiScoreOffset,
+    hintY: buttonsY + contentH + hintOffset,
   };
 }
 
@@ -414,7 +448,9 @@ export class TitleScene implements Scene {
 
     if (this.toastText) this.renderToast(r);
 
-    drawAudioHint(r, !audio.hasStarted());
+    // M8 fix-up spec item 3: top-right corner, not top-left - top-left is where the logo's peeking
+    // frog sits (drawLogoFrogPeek above), which the hint used to overlap.
+    drawAudioHint(r, !audio.hasStarted(), { corner: 'top-right' });
     transitions.render(r);
   }
 

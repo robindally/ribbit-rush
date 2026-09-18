@@ -319,11 +319,14 @@ export class SettingsScene implements Scene {
     this.label(r, labelX, this.rows.onScreenDpad, 'ON-SCREEN D-PAD');
     this.toggle(r, 'onScreenDpad', s.onScreenDpad, accent);
 
+    // M8 fix-up spec item 4: ink at 70% alpha, not the world's own accentB (world 1's accentB,
+    // #FF6B6B, reads as the reserved danger red - ART_BIBLE.md section 3 keeps that colour for the
+    // timer and death flash only).
     r.text('CONTROLS - press to bind, Esc cancels', labelX, this.rows.__controlsLabel.y, {
       size: 12,
       weight: 700,
       align: 'left',
-      color: theme.palette.accentB,
+      color: 'rgba(27, 42, 29, 0.7)',
     });
 
     for (const { action, label } of BIND_ROWS) {

@@ -135,15 +135,24 @@ export function drawHud(r: Renderer, hud: HudState): void {
   r.ctx.restore();
 }
 
-/** A small "tap for sound" hint in the HUD's top-left corner, shown until the first user gesture
+/** A small "tap for sound" hint in the HUD's top corner, shown until the first user gesture
  * creates the AudioContext (docs/specs/M5-audio.md section 1). Called by any scene that wants it
- * (title, play) - not tied to `drawHud` itself since Title doesn't otherwise draw a HUD. */
-export function drawAudioHint(r: Renderer, visible: boolean): void {
+ * (title, play) - not tied to `drawHud` itself since Title doesn't otherwise draw a HUD.
+ *
+ * Defaults to the top-left, `play.ts`'s own HUD corner (unchanged pre-M8-fix-up behaviour); Title
+ * passes `corner: 'top-right'` instead (M8 fix-up spec item 3) since top-left is where the logo's
+ * peeking frog sits (see `title.ts`'s `drawLogoFrogPeek`) and the two used to overlap. */
+export function drawAudioHint(
+  r: Renderer,
+  visible: boolean,
+  opts: { corner?: 'top-left' | 'top-right' } = {},
+): void {
   if (!visible) return;
-  r.text('\u{1F507} Tap for sound', 12, 12, {
+  const rightAligned = opts.corner === 'top-right';
+  r.text('\u{1F507} Tap for sound', rightAligned ? CANVAS_WIDTH - 12 : 12, 12, {
     size: 12,
     weight: 600,
-    align: 'left',
+    align: rightAligned ? 'right' : 'left',
     color: CREAM,
     outline: INK,
   });

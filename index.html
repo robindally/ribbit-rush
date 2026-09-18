@@ -19,7 +19,13 @@
       }
       #app {
         display: flex;
-        align-items: center;
+        /* Top-aligned (not centred) so any free vertical space below the canvas - the common case
+           on a tall portrait phone, where the canvas scales to width and stops well short of the
+           viewport's height - collects entirely below it, where render/touchControls.ts's
+           below-canvas d-pad/pause overlay needs it (M8 fix-up spec item 1). Makes no visible
+           difference on desktop/landscape, where the canvas already fills almost the full
+           viewport height (scale is height-bound there, not width-bound). */
+        align-items: flex-start;
         justify-content: center;
         width: 100vw;
         height: 100vh;
