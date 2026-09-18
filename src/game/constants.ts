@@ -70,3 +70,8 @@ export const STREAK_MULTIPLIER_CAP = 4;
 // Canvas logical size
 export const CANVAS_WIDTH = COLS * TILE; // 624
 export const CANVAS_HEIGHT = ROWS * TILE; // 720
+
+// M8: Endless mode (wiring is M9) unlocks once the player has ever reached this campaign level
+// (docs/specs/M8-ui-input.md section 1: "locked until level 15 has been reached"). Matches
+// game/level.ts's own 15-level campaign (past this, getLevel loops world 5).
+export const ENDLESS_UNLOCK_LEVEL = 15;

@@ -26,7 +26,10 @@ import { drawWaterBankStatic } from './water';
 
 const BACKDROP = '#0c0d1a'; // canvas backdrop behind the HUD rows (0 and 14)
 
-function drawGrassBand(
+/** Exported for `scenes/title.ts`'s grass bank strip (M8 spec section 1's title composition
+ * paragraph) - the same grassA/grassB mowing-stripe + tuft treatment the play field's start bank
+ * uses, reused rather than duplicated. */
+export function drawGrassBand(
   ctx: CanvasRenderingContext2D,
   theme: WorldTheme,
   y0: number,

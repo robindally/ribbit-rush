@@ -2,6 +2,8 @@
 // Reads are guarded with try/catch and defaults so a corrupt blob or a disabled/unavailable
 // localStorage (private browsing, SSR-ish test runs, etc.) never throws.
 
+import { ENDLESS_UNLOCK_LEVEL } from '../game/constants';
+
 export interface LeaderboardEntry {
   name: string;
   score: number;
@@ -24,11 +26,24 @@ export interface SaveSettings {
   /** `M` toggles this at runtime (docs/specs/M5-audio.md); persisted like the volumes. */
   muted: boolean;
   reduceMotion: boolean;
+  /** `press the key to bind` remap for the four hop directions plus confirm/pause (M8 spec section
+   * 2). Keys are action names (`'up' | 'down' | 'left' | 'right' | 'confirm' | 'pause'`), values
+   * are `KeyboardEvent.code` strings. Only the actions the player has actually rebound are present
+   * here - `core/input.ts`'s own defaults still work for anything absent (see `core/input.ts`'s
+   * `mapKeyToAction`: a custom binding is layered on top of, not a replacement for, the built-in
+   * arrow/WASD/Enter/Space/Escape mapping, so a remap can never brick the keyboard, and the
+   * reviewer's Enter-on-Title harness keeps working no matter what's been rebound). */
   keys: Record<string, string>;
+  /** On-screen d-pad toggle (M8 spec section 3). Defaults to on for touch-capable devices, off
+   * otherwise - see `detectTouchDefault` below. */
+  onScreenDpad: boolean;
 }
 
 export interface SaveData {
   hiScore: number;
+  /** Highest campaign level number ever reached, across every run (M8: gates Endless's lock -
+   * `isEndlessUnlocked` below). Not reset between runs, unlike `World.levelNumber`. */
+  bestLevel: number;
   leaderboard: LeaderboardEntry[];
   settings: SaveSettings;
   unlocks: string[];
@@ -39,11 +54,31 @@ export interface SaveData {
 
 const SAVE_KEY = 'ribbit-rush.v1';
 
+/** Best-effort touch-device detection for `onScreenDpad`'s default. Guarded so it's always safe to
+ * call from a plain Node/Vitest environment (no `navigator`) as well as the browser. */
+function detectTouchDefault(): boolean {
+  try {
+    if (typeof navigator === 'undefined') return false;
+    return (navigator.maxTouchPoints ?? 0) > 0;
+  } catch {
+    return false;
+  }
+}
+
 function defaultSave(): SaveData {
   return {
     hiScore: 0,
+    bestLevel: 1,
     leaderboard: [],
-    settings: { master: 80, music: 70, sfx: 100, muted: false, reduceMotion: false, keys: {} },
+    settings: {
+      master: 80,
+      music: 70,
+      sfx: 100,
+      muted: false,
+      reduceMotion: false,
+      keys: {},
+      onScreenDpad: detectTouchDefault(),
+    },
     unlocks: [],
     lastName: '',
   };
@@ -55,16 +90,38 @@ export function loadSave(): SaveData {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return fallback;
     const parsed = JSON.parse(raw) as Partial<SaveData>;
+    const parsedSettings = (parsed.settings ?? {}) as Partial<SaveSettings>;
     return {
       hiScore: typeof parsed.hiScore === 'number' ? parsed.hiScore : fallback.hiScore,
+      bestLevel: typeof parsed.bestLevel === 'number' ? parsed.bestLevel : fallback.bestLevel,
       leaderboard: Array.isArray(parsed.leaderboard) ? parsed.leaderboard : fallback.leaderboard,
-      settings: { ...fallback.settings, ...(parsed.settings ?? {}) },
+      settings: {
+        ...fallback.settings,
+        ...parsedSettings,
+        onScreenDpad:
+          typeof parsedSettings.onScreenDpad === 'boolean'
+            ? parsedSettings.onScreenDpad
+            : fallback.settings.onScreenDpad,
+      },
       unlocks: Array.isArray(parsed.unlocks) ? parsed.unlocks : fallback.unlocks,
       lastName: typeof parsed.lastName === 'string' ? parsed.lastName : fallback.lastName,
     };
   } catch {
     return fallback;
   }
+}
+
+/** Whether Endless mode's lock (M8 spec section 1) is open - the player has ever reached
+ * `ENDLESS_UNLOCK_LEVEL`. Pure, so the unlock boundary is directly unit-testable. */
+export function isEndlessUnlocked(bestLevel: number): boolean {
+  return bestLevel >= ENDLESS_UNLOCK_LEVEL;
+}
+
+/** Records a newly-reached campaign level as this save's best-ever, if higher than what's already
+ * stored. Pure - callers still need to `writeSave` themselves (matching every other save mutation
+ * in this codebase, e.g. `GameOverScene`'s `hiScore` update). */
+export function recordBestLevel(save: SaveData, levelReached: number): void {
+  if (levelReached > save.bestLevel) save.bestLevel = levelReached;
 }
 
 // --- Leaderboard (M7: docs/specs/M7-powerups-scoring.md section 4) ---

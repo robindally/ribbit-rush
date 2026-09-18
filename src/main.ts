@@ -7,7 +7,7 @@ import '@fontsource/fredoka/700.css';
 
 import * as audio from './core/audio';
 import * as music from './audio/music';
-import { attachInput } from './core/input';
+import { attachInput, setKeyBindings } from './core/input';
 import { startLoop, Scenes } from './core/loop';
 import { loadSave } from './core/save';
 import { setReduceMotion as setHitstopReduceMotion } from './fx/hitstop';
@@ -15,6 +15,7 @@ import { setReduceMotion as setShakeReduceMotion } from './fx/shake';
 import { setReduceMotion as setTransitionsReduceMotion } from './fx/transitions';
 import { createRenderer } from './render/renderer';
 import { loadSprites } from './render/sprites';
+import { getActiveFocusManager } from './render/ui';
 import { TitleScene } from './scenes/title';
 
 async function boot(): Promise<void> {
@@ -29,6 +30,9 @@ async function boot(): Promise<void> {
   setHitstopReduceMotion(save.settings.reduceMotion);
   setShakeReduceMotion(save.settings.reduceMotion);
   setTransitionsReduceMotion(save.settings.reduceMotion);
+  // M8: applies any key remap from a previous session (docs/specs/M8-ui-input.md section 2) -
+  // `scenes/settings.ts` calls `setKeyBindings` again live whenever the player rebinds a key.
+  setKeyBindings(save.settings.keys);
 
   const atlas = await loadSprites();
   const renderer = createRenderer(canvas, atlas);
@@ -50,7 +54,18 @@ async function boot(): Promise<void> {
     // as a plain property on audio's instead of merging the two objects.
     const audioHook = audio.devHook() as Record<string, unknown>;
     audioHook.music = music.devHook();
-    w.__rr = { ...w.__rr, audio: audioHook };
+    // M8 spec: "Add window.__rr.ui with the focus manager for testing" - `current` is a live
+    // getter (same "live getters, not a one-time snapshot" precedent `audio.devHook()` already
+    // set - see docs/specs/M5-report.md) so it always reflects whichever menu scene is on top.
+    w.__rr = {
+      ...w.__rr,
+      audio: audioHook,
+      ui: {
+        get current() {
+          return getActiveFocusManager();
+        },
+      },
+    };
   }
 
   attachInput(canvas);

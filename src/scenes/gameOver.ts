@@ -1,11 +1,18 @@
-// Game Over card: score, hi-score, run statistics (M7 spec section 3), and - on a qualifying
-// score - an arcade-style three-letter leaderboard name entry (M7 spec section 4). M8 restyles
-// this whole screen; for now it's the existing simple card with the new content bolted on.
+// Game Over card (M8 spec section 1, restyled onto the shared UI kit): score, hi-score, the M7 run
+// statistics, Retry and Title buttons, and - on a qualifying score - the arcade-style three-letter
+// leaderboard name entry from M7 (kept as-is: it already works well with keyboard and touch, and
+// deliberately bypasses the normal InputAction pipeline the same way this file's own doc comment
+// on `attachNameEntryInput` explains).
 
 import type { Scene, SceneManager } from '../core/loop';
 import * as audio from '../core/audio';
 import type { LeaderboardEntry, SaveData } from '../core/save';
-import { insertLeaderboardEntry, qualifiesForLeaderboard, writeSave } from '../core/save';
+import {
+  insertLeaderboardEntry,
+  qualifiesForLeaderboard,
+  recordBestLevel,
+  writeSave,
+} from '../core/save';
 import * as transitions from '../fx/transitions';
 import type { RunStats } from '../game/scoring';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../game/constants';
@@ -13,10 +20,18 @@ import { getWorldTheme } from '../game/themes';
 import type { InputAction } from '../game/types';
 import { roundRect } from '../render/draw/background';
 import type { Renderer } from '../render/renderer';
+import {
+  drawButton,
+  drawCard,
+  FocusManager,
+  INK,
+  pushActiveFocusManager,
+  popActiveFocusManager,
+  type Rect,
+} from '../render/ui';
+import { PlayScene } from './play';
 import { TitleScene } from './title';
 
-const CREAM = '#FFF7E6';
-const INK = '#1B2A1D';
 const DANGER = '#FF4D4D';
 const GOLD = '#FFC83D';
 
@@ -56,6 +71,11 @@ export class GameOverScene implements Scene {
   private nameEntryDone: boolean;
   private letters: number[];
   private cursor = 0;
+  private focus = new FocusManager();
+  private buttonRects: { retry: Rect; title: Rect } = {
+    retry: { x: 0, y: 0, w: 0, h: 0 },
+    title: { x: 0, y: 0, w: 0, h: 0 },
+  };
 
   private onRawKeyDown: ((e: KeyboardEvent) => void) | null = null;
   private onRawTouchEnd: ((e: TouchEvent) => void) | null = null;
@@ -68,12 +88,16 @@ export class GameOverScene implements Scene {
     private stats: RunStats,
   ) {
     if (score > this.save.hiScore) this.save.hiScore = score;
+    recordBestLevel(this.save, stats.levelReached);
     writeSave(this.save);
 
     this.qualifies = qualifiesForLeaderboard(this.save.leaderboard, score);
     this.nameEntryDone = !this.qualifies;
 
-    const defaultName = (this.save.lastName || 'AAA').toUpperCase().padEnd(LETTERS, 'A').slice(0, LETTERS);
+    const defaultName = (this.save.lastName || 'AAA')
+      .toUpperCase()
+      .padEnd(LETTERS, 'A')
+      .slice(0, LETTERS);
     this.letters = Array.from({ length: LETTERS }, (_, i) => {
       const code = defaultName.charCodeAt(i) - 65;
       return code >= 0 && code < ALPHABET_LEN ? code : 0;
@@ -82,14 +106,58 @@ export class GameOverScene implements Scene {
 
   enter(): void {
     if (!this.nameEntryDone) this.attachNameEntryInput();
+    this.registerButtons();
+    const canvas = document.getElementById('game');
+    if (canvas instanceof HTMLCanvasElement) this.focus.attach(canvas);
+    pushActiveFocusManager(this.focus);
   }
 
   exit(): void {
     this.detachNameEntryInput();
+    this.focus.detach();
+    popActiveFocusManager(this.focus);
   }
 
   update(dt: number): void {
     transitions.update(dt);
+  }
+
+  private registerButtons(): void {
+    const w = CANVAS_WIDTH * 0.82;
+    const h = CANVAS_HEIGHT * 0.6;
+    const x = (CANVAS_WIDTH - w) / 2;
+    const y = (CANVAS_HEIGHT - h) / 2;
+    const buttonW = (w - 56 - 16) / 2;
+    const buttonY = y + h - 62;
+    this.buttonRects = {
+      retry: { x: x + 28, y: buttonY, w: buttonW, h: 44 },
+      title: { x: x + 28 + buttonW + 16, y: buttonY, w: buttonW, h: 44 },
+    };
+    this.focus.clear();
+    this.focus.add({
+      id: 'retry',
+      kind: 'button',
+      rect: this.buttonRects.retry,
+      disabled: !this.nameEntryDone,
+      onActivate: () => this.retry(),
+    });
+    this.focus.add({
+      id: 'title',
+      kind: 'button',
+      rect: this.buttonRects.title,
+      disabled: !this.nameEntryDone,
+      onActivate: () => this.toTitle(),
+    });
+  }
+
+  private retry(): void {
+    if (!this.nameEntryDone) return;
+    transitions.play(() => this.scenes.replace(new PlayScene(this.scenes, this.save)));
+  }
+
+  private toTitle(): void {
+    if (!this.nameEntryDone) return;
+    transitions.play(() => this.scenes.replace(new TitleScene(this.scenes, this.save)));
   }
 
   // --- Arcade-style three-letter name entry (M7 spec section 4) ---
@@ -99,6 +167,8 @@ export class GameOverScene implements Scene {
   // position (core/input.ts's "a tap hops up"), which can't drive "tap a letter to cycle" at all.
   // Raw listeners (same precedent as PlayScene's dev level-jump key and audio.ts's mute key) let
   // keyboard and touch be handled independently without the two fighting over the same gesture.
+  // While active, `onAction`/the Retry-Title buttons are disabled (registered but `disabled: true`
+  // above, and `onAction` itself early-returns) - both re-enable the instant a name is confirmed.
 
   private attachNameEntryInput(): void {
     this.onRawKeyDown = (e: KeyboardEvent): void => {
@@ -173,6 +243,7 @@ export class GameOverScene implements Scene {
     writeSave(this.save);
     this.nameEntryDone = true;
     this.detachNameEntryInput();
+    this.registerButtons(); // re-registers Retry/Title as enabled now that entry is done
     audio.playSfx('uiConfirm');
   }
 
@@ -184,35 +255,24 @@ export class GameOverScene implements Scene {
 
     const theme = getWorldTheme(1);
     const w = CANVAS_WIDTH * 0.82;
-    const h = CANVAS_HEIGHT * 0.56;
+    const h = CANVAS_HEIGHT * 0.6;
     const x = (CANVAS_WIDTH - w) / 2;
     const y = (CANVAS_HEIGHT - h) / 2;
+    drawCard(r, { x, y, w, h }, theme.palette.accentB);
 
-    r.ctx.save();
-    r.ctx.globalAlpha = 0.96;
-    r.ctx.fillStyle = CREAM;
-    roundRect(r, x, y, w, h, 24);
-    r.ctx.restore();
-
-    r.ctx.save();
-    roundRect(r, x, y, w, 10, 10);
-    r.ctx.fillStyle = theme.palette.accentB;
-    r.ctx.fill();
-    r.ctx.restore();
-
-    r.text('GAME OVER', CANVAS_WIDTH / 2, y + h * 0.13, {
+    r.text('GAME OVER', CANVAS_WIDTH / 2, y + h * 0.12, {
       size: 30,
       weight: 700,
       align: 'center',
       color: DANGER,
     });
-    r.text(`SCORE ${this.score}`, CANVAS_WIDTH / 2, y + h * 0.22, {
+    r.text(`SCORE ${this.score}`, CANVAS_WIDTH / 2, y + h * 0.2, {
       size: 20,
       weight: 600,
       align: 'center',
       color: INK,
     });
-    r.text(`HI-SCORE ${this.save.hiScore}`, CANVAS_WIDTH / 2, y + h * 0.29, {
+    r.text(`HI-SCORE ${this.save.hiScore}`, CANVAS_WIDTH / 2, y + h * 0.26, {
       size: 15,
       weight: 600,
       align: 'center',
@@ -220,12 +280,12 @@ export class GameOverScene implements Scene {
       outline: INK,
     });
 
-    this.renderStats(r, CANVAS_WIDTH / 2, y + h * 0.4);
+    this.renderStats(r, CANVAS_WIDTH / 2, y + h * 0.36);
 
     if (!this.nameEntryDone) {
-      this.renderNameEntry(r, CANVAS_WIDTH / 2, y + h * 0.62);
+      this.renderNameEntry(r, CANVAS_WIDTH / 2, y + h * 0.56);
     } else if (this.qualifies) {
-      r.text('Saved to the leaderboard!', CANVAS_WIDTH / 2, y + h * 0.62, {
+      r.text('Saved to the leaderboard!', CANVAS_WIDTH / 2, y + h * 0.56, {
         size: 15,
         weight: 600,
         align: 'center',
@@ -233,12 +293,30 @@ export class GameOverScene implements Scene {
       });
     }
 
-    r.text('Press confirm for Title', CANVAS_WIDTH / 2, y + h * 0.92, {
-      size: 14,
-      weight: 500,
-      align: 'center',
-      color: INK,
-    });
+    drawButton(
+      r,
+      this.buttonRects.retry,
+      'RETRY',
+      {
+        hover: this.focus.isHovered('retry'),
+        pressed: this.focus.isPressed('retry'),
+        focused: this.focus.isFocused('retry'),
+        disabled: !this.nameEntryDone,
+      },
+      { accent: theme.palette.accentA },
+    );
+    drawButton(
+      r,
+      this.buttonRects.title,
+      'TITLE',
+      {
+        hover: this.focus.isHovered('title'),
+        pressed: this.focus.isPressed('title'),
+        focused: this.focus.isFocused('title'),
+        disabled: !this.nameEntryDone,
+      },
+      { accent: theme.palette.accentA },
+    );
 
     transitions.render(r);
   }
@@ -304,20 +382,23 @@ export class GameOverScene implements Scene {
       });
     }
 
-    r.text('Arrows: move / cycle - tap a letter to cycle - confirm to accept', cx, y + boxH / 2 + 18, {
-      size: 11,
-      weight: 500,
-      align: 'center',
-      color: INK,
-    });
+    r.text(
+      'Arrows: move / cycle - tap a letter to cycle - confirm to accept',
+      cx,
+      y + boxH / 2 + 18,
+      {
+        size: 11,
+        weight: 500,
+        align: 'center',
+        color: INK,
+      },
+    );
   }
 
   onAction(a: InputAction): void {
     if (!this.nameEntryDone) return; // driven entirely by the raw listeners above while active
     if (transitions.isActive()) return; // ignore input mid-wipe
-    if (a.type === 'confirm' || a.type === 'back') {
-      audio.playSfx('uiConfirm');
-      transitions.play(() => this.scenes.replace(new TitleScene(this.scenes, this.save)));
-    }
+    if (this.focus.handleAction(a)) return;
+    if (a.type === 'confirm' || a.type === 'back') this.toTitle();
   }
 }

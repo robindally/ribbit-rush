@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   insertLeaderboardEntry,
+  isEndlessUnlocked,
   LEADERBOARD_MAX,
   qualifiesForLeaderboard,
+  recordBestLevel,
   type LeaderboardEntry,
+  type SaveData,
 } from '../src/core/save';
 
 function entry(name: string, score: number): LeaderboardEntry {
@@ -56,5 +59,57 @@ describe('qualifiesForLeaderboard', () => {
     expect(qualifiesForLeaderboard(board, 100)).toBe(false); // ties don't bump the lowest
     expect(qualifiesForLeaderboard(board, 101)).toBe(true);
     expect(qualifiesForLeaderboard(board, 50)).toBe(false);
+  });
+});
+
+// M8 spec section 1: Endless is "locked until level 15 has been reached."
+describe('isEndlessUnlocked', () => {
+  it('is locked below level 15', () => {
+    expect(isEndlessUnlocked(1)).toBe(false);
+    expect(isEndlessUnlocked(14)).toBe(false);
+  });
+
+  it('unlocks at exactly level 15 and stays unlocked beyond it', () => {
+    expect(isEndlessUnlocked(15)).toBe(true);
+    expect(isEndlessUnlocked(20)).toBe(true);
+  });
+});
+
+describe('recordBestLevel', () => {
+  function save(bestLevel: number): SaveData {
+    return {
+      hiScore: 0,
+      bestLevel,
+      leaderboard: [],
+      settings: {
+        master: 80,
+        music: 70,
+        sfx: 100,
+        muted: false,
+        reduceMotion: false,
+        keys: {},
+        onScreenDpad: false,
+      },
+      unlocks: [],
+      lastName: '',
+    };
+  }
+
+  it('raises bestLevel when a higher level is reached', () => {
+    const s = save(3);
+    recordBestLevel(s, 7);
+    expect(s.bestLevel).toBe(7);
+  });
+
+  it('never lowers bestLevel', () => {
+    const s = save(10);
+    recordBestLevel(s, 4);
+    expect(s.bestLevel).toBe(10);
+  });
+
+  it('leaves bestLevel unchanged on a tie', () => {
+    const s = save(5);
+    recordBestLevel(s, 5);
+    expect(s.bestLevel).toBe(5);
   });
 });

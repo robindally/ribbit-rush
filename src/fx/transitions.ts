@@ -33,6 +33,13 @@ export function setReduceMotion(v: boolean): void {
   reduceMotion = v;
 }
 
+/** Read-only accessor for scenes with their own non-fx animations to honour (M8 spec section 6:
+ * "reduce motion honoured everywhere") - e.g. `scenes/results.ts`'s time-bonus count-up and
+ * pad-lighting stagger, which aren't otherwise routed through any `fx/` module. */
+export function isReduceMotion(): boolean {
+  return reduceMotion;
+}
+
 /**
  * Starts the transition: shrinks the mask to (`focusX`, `focusY`) (defaults to screen centre),
  * calls `onScenesSwapped` the instant the shrink completes (the caller does the actual

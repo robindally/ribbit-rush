@@ -32,8 +32,16 @@ export class Scenes implements SceneManager {
   private stack: Scene[] = [];
 
   replace(s: Scene): void {
-    const prev = this.stack.pop();
-    prev?.exit?.();
+    // M8: tears down the *whole* stack, not just the top - `PauseScene`'s "Quit to title" (spec
+    // section 1) replaces a two-deep stack ([PlayScene, PauseScene]), and PlayScene's own exit()
+    // (unsubscribing from gameEvents, disabling the ambient horn, recording the run's best level
+    // reached) must still run even though it isn't the top scene. Every pre-M8 call site only ever
+    // had one scene on the stack when it called `replace`, so this is unobservable there - same
+    // final state, just now also correct for a deeper stack.
+    while (this.stack.length > 0) {
+      const prev = this.stack.pop();
+      prev?.exit?.();
+    }
     this.stack = [s];
     s.enter?.();
   }
