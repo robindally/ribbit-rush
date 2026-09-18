@@ -1,108 +1,186 @@
-// Movers (vehicles, logs, turtles) and the frog. Flat placeholder shapes only - see
-// docs/specs/M0-M2-classic-core.md "Placeholder rendering".
+// Movers (vehicles, logs, turtles) and the frog, sprite-based. See ARCHITECTURE.md section 11,
+// docs/ART_BIBLE.md sections 4-5, and docs/specs/M3-art-pass.md sections 1 and 4-5.
 
 import { COLS, TILE } from '../../game/constants';
-import { moverInstances, turtleDiveState } from '../../game/lanes';
-import type { Frog, LaneDef, MoverDef } from '../../game/types';
+import { moverInstances } from '../../game/lanes';
+import type { Dir, Frog, LaneDef, MoverDef } from '../../game/types';
+import {
+  busBounceTiles,
+  frogBlink,
+  frogDeathVisual,
+  frogHopArc,
+  frogHopScale,
+  frogIdleBreath,
+  frogLandingSquash,
+  frogShadowScale,
+  isLandingSquashActive,
+  motorbikeLeanRad,
+  turtleVisual,
+  type ScaleXY,
+} from '../anim';
 import type { Renderer } from '../renderer';
-import { roundRect } from './background';
 
-const VEHICLE_COLORS: Partial<Record<MoverDef['type'], string>> = {
-  car: '#e2574c',
-  taxi: '#f2c14e',
-  sports: '#8e44ad',
-  pickup: '#d35400',
-  van: '#2e86ab',
-  truck: '#556b2f',
-  bus: '#f39c12',
-  motorbike: '#7f8c8d',
-  tram: '#16a085',
-  train: '#2c3e50',
+// Frog faces up in its SVG (ARCHITECTURE.md section 11 / ART_BIBLE.md section 2); rotate for the
+// other three facings.
+const DIR_ROT: Record<Dir, number> = {
+  up: 0,
+  right: Math.PI / 2,
+  down: Math.PI,
+  left: -Math.PI / 2,
 };
 
-const LOG_COLOR = '#8a5a30';
-const TURTLE_COLOR = '#3d8f52';
-const TURTLE_DIM = 'rgba(61, 143, 82, 0.45)';
-const CROC_COLOR = '#2f5233';
-const FLOE_COLOR = '#dce9ee';
+const FROG_BODY = '#58D65E';
 
-function drawMoverInstance(
+function drawLog(r: Renderer, px: number, cy: number, widthTiles: number): void {
+  const w = Math.max(2, Math.round(widthTiles));
+  r.sprite('log-end', px + TILE / 2, cy);
+  for (let i = 1; i < w - 1; i++) {
+    r.sprite('log-mid', px + i * TILE + TILE / 2, cy);
+  }
+  r.sprite('log-end', px + (w - 1) * TILE + TILE / 2, cy, { flipX: true });
+}
+
+function drawTurtleGroup(
   r: Renderer,
-  lane: LaneDef,
+  px: number,
+  cy: number,
   mover: MoverDef,
-  x: number,
+  lane: LaneDef,
   elapsed: number,
 ): void {
-  const y = lane.row * TILE;
-  const h = TILE * 0.72;
-  const padY = (TILE - h) / 2;
-  const px = x * TILE;
-  const w = mover.width * TILE;
-
-  if (px + w < 0 || px > COLS * TILE) return; // off-screen, skip
-
-  if (mover.type === 'log') {
-    r.ctx.fillStyle = LOG_COLOR;
-    roundRect(r, px + 2, y + padY, w - 4, h, 10);
-    return;
+  const count = Math.max(1, Math.round(mover.width));
+  // turtle.svg faces left (ARCHITECTURE.md section 11); flip for right-moving (positive speed)
+  // lanes.
+  const flip = lane.speed > 0;
+  const visual = mover.dive ? turtleVisual(mover.dive, elapsed) : { visible: true, scale: 1, alpha: 1 };
+  if (!visual.visible) return;
+  for (let i = 0; i < count; i++) {
+    const cx = px + (i + 0.5) * TILE;
+    r.sprite('turtle', cx, cy, {
+      flipX: flip,
+      sx: visual.scale,
+      sy: visual.scale,
+      alpha: visual.alpha,
+    });
   }
+}
 
-  if (mover.type === 'turtle') {
-    const dim = !!mover.dive && turtleDiveState(mover.dive, elapsed) === 'down';
-    r.ctx.fillStyle = dim ? TURTLE_DIM : TURTLE_COLOR;
-    const count = Math.max(1, Math.round(mover.width));
-    for (let i = 0; i < count; i++) {
-      const cx = px + (i + 0.5) * TILE;
-      r.ctx.beginPath();
-      r.ctx.arc(cx, y + TILE / 2, TILE * 0.38, 0, Math.PI * 2);
-      r.ctx.fill();
-    }
-    return;
-  }
-
-  if (mover.type === 'croc') {
-    r.ctx.fillStyle = CROC_COLOR;
-    roundRect(r, px + 2, y + padY, w - 4, h, 8);
-    return;
-  }
-
-  if (mover.type === 'floe') {
-    r.ctx.fillStyle = FLOE_COLOR;
-    roundRect(r, px + 2, y + padY, w - 4, h, 10);
-    return;
-  }
-
-  // Vehicles: rounded rects in distinct colours.
-  r.ctx.fillStyle = VEHICLE_COLORS[mover.type] ?? '#999999';
-  roundRect(r, px + 3, y + padY, w - 6, h, 8);
+function drawVehicle(r: Renderer, cx: number, cy: number, lane: LaneDef, mover: MoverDef, elapsed: number): void {
+  // Vehicles face right in their SVGs; flip for lanes moving left (negative speed).
+  const flip = lane.speed < 0;
+  let rot = 0;
+  let y = cy;
+  if (mover.type === 'motorbike') rot = motorbikeLeanRad(1);
+  if (mover.type === 'bus') y += busBounceTiles(elapsed) * TILE;
+  r.sprite(mover.type, cx, y, { flipX: flip, rot });
 }
 
 export function drawLaneMovers(r: Renderer, lane: LaneDef, elapsed: number): void {
   for (const mover of lane.movers) {
     for (const x of moverInstances(lane, mover)) {
-      drawMoverInstance(r, lane, mover, x, elapsed);
+      const px = x * TILE;
+      const w = mover.width * TILE;
+      if (px + w < 0 || px > COLS * TILE) continue; // off-screen, skip
+
+      const cy = lane.row * TILE + TILE / 2;
+
+      if (mover.type === 'log') {
+        drawLog(r, px, cy, mover.width);
+      } else if (mover.type === 'turtle') {
+        drawTurtleGroup(r, px, cy, mover, lane, elapsed);
+      } else {
+        drawVehicle(r, px + w / 2, cy, lane, mover, elapsed);
+      }
     }
   }
 }
 
-/** Draws the frog with a hop arc: lifted by sin(pi * hopT) * 0.4 * TILE while hopping. */
-export function drawFrog(r: Renderer, frog: Frog): void {
+function drawBlinkOverlay(r: Renderer, cx: number, y: number, rot: number, scale: ScaleXY): void {
+  const ctx = r.ctx;
+  ctx.save();
+  ctx.translate(cx, y);
+  if (rot) ctx.rotate(rot);
+  ctx.scale(scale.scaleX, scale.scaleY);
+  ctx.fillStyle = FROG_BODY;
+  ctx.beginPath();
+  ctx.ellipse(-8.5, -15.5, 5.2, 3.9, 0, 0, Math.PI * 2);
+  ctx.ellipse(8.5, -15.5, 5.2, 3.9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawFrogDeath(r: Renderer, frog: Frog, cx: number, groundY: number): void {
+  const v = frogDeathVisual(frog.deathCause, frog.stateT);
+  const y = groundY + v.sinkY * TILE;
+  const rot = DIR_ROT[frog.facing];
+
+  r.shadow(cx, groundY + TILE * 0.22, TILE * 0.56, TILE * 0.26, 0.6);
+  r.sprite('frog-idle', cx, y, { rot, sx: v.scaleX, sy: v.scaleY, alpha: v.alpha });
+
+  if (v.redFlash) {
+    r.ctx.save();
+    r.ctx.globalAlpha = 0.45;
+    r.ctx.fillStyle = '#FF4D4D';
+    r.ctx.beginPath();
+    r.ctx.ellipse(cx, y, TILE * 0.32, TILE * 0.32, 0, 0, Math.PI * 2);
+    r.ctx.fill();
+    r.ctx.restore();
+  }
+
+  if (v.tireMarks) {
+    r.ctx.save();
+    r.ctx.strokeStyle = 'rgba(27, 42, 29, 0.5)';
+    r.ctx.lineWidth = 4;
+    r.ctx.lineCap = 'round';
+    r.ctx.beginPath();
+    r.ctx.moveTo(cx - TILE * 0.4, y - TILE * 0.18);
+    r.ctx.lineTo(cx + TILE * 0.4, y - TILE * 0.18);
+    r.ctx.moveTo(cx - TILE * 0.4, y + TILE * 0.18);
+    r.ctx.lineTo(cx + TILE * 0.4, y + TILE * 0.18);
+    r.ctx.stroke();
+    r.ctx.restore();
+  }
+}
+
+/** Draws the frog: hop arc + squash-and-stretch, idle breathing/blink, or a death tween,
+ * dispatched from `frog.state`/`frog.stateT`/`frog.hopT` - all already part of the tested Frog
+ * type, so none of this needs new gameplay-side state. `elapsed` is the world's simulation clock
+ * (drives idle breathing/blink, which have no gameplay effect). */
+export function drawFrog(r: Renderer, frog: Frog, elapsed: number): void {
   const cx = (frog.x + 0.5) * TILE;
   const groundY = frog.row * TILE + TILE / 2;
-  const hopLift = frog.state === 'hopping' ? Math.sin(Math.PI * frog.hopT) * 0.4 * TILE : 0;
-  const y = groundY - hopLift;
 
-  r.shadow(cx, groundY + TILE * 0.22, TILE * 0.56, TILE * 0.26);
+  if (frog.state === 'dying' || frog.state === 'dead') {
+    drawFrogDeath(r, frog, cx, groundY);
+    return;
+  }
 
-  const size = TILE * 0.62;
-  r.ctx.fillStyle = frog.state === 'dying' ? '#9a9a9a' : '#4caf50';
-  roundRect(r, cx - size / 2, y - size / 2, size, size, 10);
+  const hopping = frog.state === 'hopping';
+  const arcTiles = hopping ? frogHopArc(frog.hopT) : 0;
+  const y = groundY - arcTiles * TILE;
+  const shadowScale = hopping ? frogShadowScale(frog.hopT) : 1;
 
-  r.ctx.fillStyle = '#ffffff';
-  const eyeOffset = size * 0.22;
-  const eyeY = y - size * 0.22;
-  r.ctx.beginPath();
-  r.ctx.arc(cx - eyeOffset, eyeY, size * 0.12, 0, Math.PI * 2);
-  r.ctx.arc(cx + eyeOffset, eyeY, size * 0.12, 0, Math.PI * 2);
-  r.ctx.fill();
+  r.shadow(cx, groundY + TILE * 0.22, TILE * 0.56, TILE * 0.26, shadowScale);
+
+  let scale: ScaleXY;
+  if (hopping) {
+    scale = frogHopScale(frog.hopT);
+  } else if (isLandingSquashActive(frog.stateT)) {
+    scale = frogLandingSquash(frog.stateT);
+  } else {
+    const breath = frogIdleBreath(elapsed);
+    scale = { scaleX: breath, scaleY: breath };
+  }
+
+  const rot = DIR_ROT[frog.facing];
+  const useJumpFrame = hopping && frog.hopT >= 0.15 && frog.hopT <= 0.85;
+  r.sprite(useJumpFrame ? 'frog-jump' : 'frog-idle', cx, y, {
+    rot,
+    sx: scale.scaleX,
+    sy: scale.scaleY,
+  });
+
+  if (!hopping && frogBlink(elapsed)) {
+    drawBlinkOverlay(r, cx, y, rot, scale);
+  }
 }

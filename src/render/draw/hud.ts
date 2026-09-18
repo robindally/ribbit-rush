@@ -1,51 +1,101 @@
-// HUD: score / hi-score / level on top, lives and a timer bar on the bottom.
+// HUD: score / world+level / hi-score on top, lives and a timer bar on the bottom. See
+// docs/ART_BIBLE.md section 8 ("Typography and UI") and docs/specs/M3-art-pass.md section 6.
 
 import { CANVAS_WIDTH, HUD_BOTTOM_ROW, TILE } from '../../game/constants';
 import type { Renderer } from '../renderer';
+import { roundRect } from './background';
+
+const CREAM = '#FFF7E6';
+const INK = '#1B2A1D';
+const FROG_BODY = '#58D65E';
+const GOLD = '#FFC83D';
+const DANGER = '#FF4D4D';
 
 export interface HudState {
   score: number;
   hiScore: number;
   level: number;
+  worldName: string;
   lives: number;
   timeLeft: number;
   timeLimit: number;
+  elapsed: number;
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace('#', '');
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+function lerpColor(a: string, b: string, t: number): string {
+  const [ar, ag, ab] = hexToRgb(a);
+  const [br, bg, bb] = hexToRgb(b);
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return `rgb(${r}, ${g}, ${bl})`;
+}
+
+/** frogBody above 40% remaining, ramps to gold by 20%, ramps to danger by 0%. */
+function timerColor(pct: number): string {
+  if (pct > 0.4) return FROG_BODY;
+  if (pct > 0.2) return lerpColor(GOLD, FROG_BODY, (pct - 0.2) / 0.2);
+  return lerpColor(DANGER, GOLD, Math.max(0, pct) / 0.2);
 }
 
 export function drawHud(r: Renderer, hud: HudState): void {
   const topY = TILE * 0.55;
-  r.text(`SCORE ${hud.score}`, 12, topY, { size: 18, align: 'left', color: '#ffffff' });
-  r.text(`HI ${hud.hiScore}`, CANVAS_WIDTH / 2, topY, {
+  r.text(`SCORE ${hud.score}`, 12, topY, {
     size: 18,
-    align: 'center',
-    color: '#ffd166',
+    weight: 700,
+    align: 'left',
+    color: CREAM,
+    outline: INK,
   });
-  r.text(`LV ${hud.level}`, CANVAS_WIDTH - 12, topY, {
+  r.text(`${hud.worldName.toUpperCase()} - L${hud.level}`, CANVAS_WIDTH / 2, topY, {
+    size: 16,
+    weight: 600,
+    align: 'center',
+    color: CREAM,
+    outline: INK,
+  });
+  r.text(`HI ${hud.hiScore}`, CANVAS_WIDTH - 12, topY, {
     size: 18,
+    weight: 700,
     align: 'right',
-    color: '#ffffff',
+    color: CREAM,
+    outline: INK,
   });
 
   const bottomY = HUD_BOTTOM_ROW * TILE;
 
-  // Lives, as small frog dots bottom-left.
-  const liveSize = 10;
+  // Lives, as small frog-idle icons bottom-left.
+  const liveScale = 0.42;
+  const liveSpacing = TILE * 0.5;
   for (let i = 0; i < hud.lives; i++) {
-    r.ctx.fillStyle = '#4caf50';
-    r.ctx.beginPath();
-    r.ctx.arc(16 + i * (liveSize + 6), bottomY + TILE / 2, liveSize / 2, 0, Math.PI * 2);
-    r.ctx.fill();
+    r.sprite('frog-idle', 16 + i * liveSpacing + (TILE * liveScale) / 2, bottomY + TILE / 2, {
+      sx: liveScale,
+      sy: liveScale,
+    });
   }
 
-  // Timer bar bottom-right.
-  const barW = TILE * 4;
+  // Timer bar bottom-right: 6 tiles wide, 10px tall, rounded, colour ramp, pulses under 5s.
+  const barW = TILE * 6;
   const barH = 10;
   const barX = CANVAS_WIDTH - barW - 12;
   const barY = bottomY + TILE / 2 - barH / 2;
   const pct = Math.max(0, Math.min(1, hud.timeLeft / Math.max(0.001, hud.timeLimit)));
 
-  r.ctx.fillStyle = 'rgba(255,255,255,0.2)';
-  r.ctx.fillRect(barX, barY, barW, barH);
-  r.ctx.fillStyle = pct < 0.25 ? '#e2574c' : '#4caf50';
-  r.ctx.fillRect(barX, barY, barW * pct, barH);
+  let alpha = 1;
+  if (hud.timeLeft < 5 && hud.timeLeft > 0) {
+    alpha = 0.7 + 0.3 * Math.sin(hud.elapsed * Math.PI * 2 * 4);
+  }
+
+  r.ctx.save();
+  r.ctx.fillStyle = 'rgba(255, 247, 230, 0.25)';
+  roundRect(r, barX, barY, barW, barH, barH / 2);
+  r.ctx.globalAlpha = alpha;
+  r.ctx.fillStyle = timerColor(pct);
+  roundRect(r, barX, barY, Math.max(barH, barW * pct), barH, barH / 2);
+  r.ctx.restore();
 }

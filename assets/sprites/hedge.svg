@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Ribbit Rush hedge tile. Tiles horizontally along the home row between lily-pad slots. -->
+  <rect x="0" y="0" width="48" height="48" fill="#2F8A48"/>
+  <g fill="#3FAF5A">
+    <circle cx="10" cy="12" r="7"/>
+    <circle cx="30" cy="8" r="6"/>
+    <circle cx="40" cy="20" r="7.5"/>
+    <circle cx="16" cy="30" r="7"/>
+    <circle cx="36" cy="38" r="6.5"/>
+    <circle cx="6" cy="40" r="5.5"/>
+  </g>
+  <g fill="#FFFFFF" opacity="0.14">
+    <circle cx="8" cy="9" r="2.6"/>
+    <circle cx="28" cy="6" r="2.2"/>
+    <circle cx="38" cy="17" r="2.6"/>
+  </g>
+</svg>

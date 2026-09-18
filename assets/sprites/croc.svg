@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 48" width="96" height="48">
+  <!-- Ribbit Rush crocodile, faces right. Home-slot hazard. Tail tapers to the left, snout at
+       the right. -->
+  <!-- tail -->
+  <path d="M20 24 L2 18 C1 21 1 27 2 30 Z" fill="#3E632D"/>
+  <path d="M21 24 L3 19 C2 21.5 2 26.5 3 29 Z" fill="#4F7F3A"/>
+  <!-- body: shade rim then top face -->
+  <ellipse cx="49" cy="25" rx="34" ry="13" fill="#3E632D"/>
+  <ellipse cx="48" cy="24" rx="34" ry="13" fill="#4F7F3A"/>
+  <!-- belly band -->
+  <rect x="18" y="30" width="58" height="5.5" rx="2.5" fill="#8DBF5A"/>
+  <!-- snout, extends past the body toward the right -->
+  <path d="M78 15 C90 16 95 20 95 24 C95 28 90 32 78 33 Z" fill="#3E632D"/>
+  <path d="M78 14.5 C89 15.5 94 19.5 94 23.5 C94 27.3 89 31 78 32 Z" fill="#4F7F3A"/>
+  <!-- tooth zigzag -->
+  <path
+    d="M79 17 L82 20 L85 17.5 L88 20.3 L91 18.2"
+    fill="none"
+    stroke="#FFFFFF"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <!-- eye bumps on top -->
+  <g>
+    <circle cx="70" cy="12.5" r="5.2" fill="#4F7F3A"/>
+    <circle cx="81" cy="11" r="4.6" fill="#4F7F3A"/>
+    <circle cx="70" cy="12" r="2.2" fill="#1B2A1D"/>
+    <circle cx="81" cy="10.6" r="2" fill="#1B2A1D"/>
+  </g>
+  <!-- highlight -->
+  <ellipse cx="30" cy="16" rx="10" ry="4" fill="#FFFFFF" opacity="0.2" transform="rotate(-10 30 16)"/>
+</svg>

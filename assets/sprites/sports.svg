@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Ribbit Rush sports car, faces right. Low profile, wide glass. -->
+  <g fill="#22242A">
+    <rect x="6" y="9.5" width="9" height="6.5" rx="2.3"/>
+    <rect x="32" y="9.5" width="9" height="6.5" rx="2.3"/>
+    <rect x="6" y="32" width="9" height="6.5" rx="2.3"/>
+    <rect x="32" y="32" width="9" height="6.5" rx="2.3"/>
+  </g>
+  <!-- lower, wider body than car.svg -->
+  <rect x="2.5" y="13" width="43" height="22" rx="9" fill="#239589"/>
+  <rect x="2.5" y="13" width="43" height="18" rx="9" fill="#2DBFB0" stroke="#26A296" stroke-width="1.5"/>
+  <!-- wide glass canopy -->
+  <rect x="11" y="15" width="27" height="12.5" rx="5" fill="#2B3A55"/>
+  <path d="M14.5 16.5 L34 16.5" stroke="#3A4E70" stroke-width="1.2" opacity="0.8"/>
+  <!-- windshield glint -->
+  <path d="M33 16.5 L35.5 25" fill="none" stroke="#9FB7E6" stroke-width="1.6" stroke-linecap="round" opacity="0.9"/>
+  <!-- low spoiler hint at the rear -->
+  <rect x="3.5" y="14.5" width="3" height="15" rx="1.4" fill="#1F7A70"/>
+  <!-- highlight -->
+  <ellipse cx="10.5" cy="17" rx="6.5" ry="2.4" fill="#FFFFFF" opacity="0.22"/>
+  <ellipse cx="40" cy="17.5" rx="3.6" ry="1.8" fill="#FFFFFF" opacity="0.16"/>
+  <!-- headlights (front, right) and taillights (rear, left) -->
+  <rect x="42.5" y="16" width="3" height="4.6" rx="1.5" fill="#FFF1A8"/>
+  <rect x="42.5" y="25.5" width="3" height="4.6" rx="1.5" fill="#FFF1A8"/>
+  <rect x="2.6" y="16" width="2.8" height="4.6" rx="1.4" fill="#FF3B3B"/>
+  <rect x="2.6" y="25.5" width="2.8" height="4.6" rx="1.4" fill="#FF3B3B"/>
+</svg>

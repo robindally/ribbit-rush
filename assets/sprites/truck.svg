@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 48" width="96" height="48">
+  <!-- Ribbit Rush truck, faces right. Tall object: 24%/26% front-face rule. Cab + trailer, full
+       2-tile body. -->
+  <g fill="#22242A">
+    <rect x="15" y="8" width="9" height="7" rx="2.5"/>
+    <rect x="45" y="8" width="9" height="7" rx="2.5"/>
+    <rect x="78" y="8" width="9" height="7" rx="2.5"/>
+    <rect x="15" y="33" width="9" height="7" rx="2.5"/>
+    <rect x="45" y="33" width="9" height="7" rx="2.5"/>
+    <rect x="78" y="33" width="9" height="7" rx="2.5"/>
+  </g>
+  <!-- trailer: front face then top face -->
+  <rect x="3" y="11" width="65" height="26" rx="6" fill="#ACA9A1"/>
+  <rect x="3" y="11" width="65" height="19.76" rx="6" fill="#E9E4D9" stroke="#C6C2B8" stroke-width="1.5"/>
+  <rect x="6" y="13.5" width="59" height="2.4" fill="#FFFFFF" opacity="0.18"/>
+  <line x1="26" y1="13.5" x2="26" y2="30" stroke="#D6D2C7" stroke-width="1.1"/>
+  <line x1="47" y1="13.5" x2="47" y2="30" stroke="#D6D2C7" stroke-width="1.1"/>
+  <!-- cab: front face then top face -->
+  <rect x="68" y="11" width="25" height="26" rx="6" fill="#2D4FA1"/>
+  <rect x="68" y="11" width="25" height="19.76" rx="6" fill="#3D6BD9" stroke="#345BB8" stroke-width="1.5"/>
+  <rect x="72" y="13.5" width="17" height="13" rx="3.5" fill="#2B3A55"/>
+  <path d="M87 14.5 L88.5 25" fill="none" stroke="#9FB7E6" stroke-width="1.5" stroke-linecap="round" opacity="0.9"/>
+  <!-- highlight -->
+  <ellipse cx="12" cy="14.5" rx="7" ry="2.4" fill="#FFFFFF" opacity="0.2"/>
+  <ellipse cx="76" cy="14.5" rx="4" ry="1.9" fill="#FFFFFF" opacity="0.18"/>
+  <!-- headlight (front, right) and taillight (rear, left) -->
+  <rect x="91" y="13.5" width="3" height="4.8" rx="1.5" fill="#FFF1A8"/>
+  <rect x="91" y="24.5" width="3" height="4.8" rx="1.5" fill="#FFF1A8"/>
+  <rect x="2.7" y="14" width="3" height="4.8" rx="1.5" fill="#FF3B3B"/>
+  <rect x="2.7" y="25" width="3" height="4.8" rx="1.5" fill="#FF3B3B"/>
+</svg>

@@ -64,6 +64,8 @@ export function createRenderer(canvas: HTMLCanvasElement, atlas: SpriteAtlas): R
     const anchor = opts.anchor ?? 'center';
     const sx = opts.sx ?? 1;
     const sy = opts.sy ?? 1;
+    // img.width/height are logical px (already scaled from the sprite's SVG viewBox), not the
+    // backing canvas's device-pixel size - see render/sprites.ts.
     const w = img.width * sx;
     const h = img.height * sy;
 
@@ -74,7 +76,7 @@ export function createRenderer(canvas: HTMLCanvasElement, atlas: SpriteAtlas): R
     if (opts.flipX) ctx.scale(-1, 1);
     const drawX = anchor === 'center' ? -w / 2 : 0;
     const drawY = anchor === 'center' ? -h / 2 : 0;
-    ctx.drawImage(img, drawX, drawY, w, h);
+    ctx.drawImage(img.canvas, drawX, drawY, w, h);
     ctx.restore();
   }
 

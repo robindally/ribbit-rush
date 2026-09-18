@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 48" width="96" height="48">
+  <!-- Ribbit Rush van, faces right. Boxy, 1.5-tile body (72px) centred in a 2-tile canvas. -->
+  <g fill="#22242A">
+    <rect x="22" y="8" width="9" height="7" rx="2.5"/>
+    <rect x="65" y="8" width="9" height="7" rx="2.5"/>
+    <rect x="22" y="33" width="9" height="7" rx="2.5"/>
+    <rect x="65" y="33" width="9" height="7" rx="2.5"/>
+  </g>
+  <!-- front face (darker) then top face - boxier corners than car.svg -->
+  <rect x="12" y="10" width="72" height="27" rx="5" fill="#BCBCBC"/>
+  <rect x="12" y="10" width="72" height="22.1" rx="5" fill="#F1F1F1" stroke="#CDCDCD" stroke-width="1.5"/>
+  <!-- long cargo body panel line -->
+  <rect x="17" y="13" width="41" height="15" rx="3" fill="#E4E4E4"/>
+  <line x1="30" y1="14" x2="30" y2="26.5" stroke="#CDCDCD" stroke-width="1.2"/>
+  <line x1="44" y1="14" x2="44" y2="26.5" stroke="#CDCDCD" stroke-width="1.2"/>
+  <!-- cab glass at the front (right) -->
+  <rect x="61" y="12.5" width="20" height="17" rx="4.5" fill="#2B3A55"/>
+  <rect x="65" y="14.5" width="11" height="13" rx="3" fill="#D8D8D8"/>
+  <path d="M78 14.5 L79.4 26.5" fill="none" stroke="#9FB7E6" stroke-width="1.5" stroke-linecap="round" opacity="0.9"/>
+  <!-- highlight -->
+  <ellipse cx="19" cy="14.5" rx="6" ry="2.3" fill="#FFFFFF" opacity="0.22"/>
+  <ellipse cx="77" cy="14.5" rx="3.4" ry="1.7" fill="#FFFFFF" opacity="0.16"/>
+  <!-- headlights (front, right) and taillights (rear, left) -->
+  <rect x="81.5" y="13.5" width="3" height="4.8" rx="1.5" fill="#FFF1A8"/>
+  <rect x="81.5" y="24.5" width="3" height="4.8" rx="1.5" fill="#FFF1A8"/>
+  <rect x="11.8" y="13.5" width="3" height="4.8" rx="1.5" fill="#FF3B3B"/>
+  <rect x="11.8" y="24.5" width="3" height="4.8" rx="1.5" fill="#FF3B3B"/>
+</svg>

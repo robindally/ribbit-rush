@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Ribbit Rush fly. Home-slot bonus, drawn tiny in the centre of the tile. -->
+  <g transform="translate(24 24)">
+    <!-- wings -->
+    <ellipse cx="-4" cy="-5" rx="6.5" ry="4" fill="rgba(255,255,255,0.6)" transform="rotate(-25 -4 -5)"/>
+    <ellipse cx="4" cy="-5" rx="6.5" ry="4" fill="rgba(255,255,255,0.6)" transform="rotate(25 4 -5)"/>
+    <!-- body: shade rim then top face -->
+    <ellipse cx="0.6" cy="1.6" rx="6" ry="8.5" fill="#232323"/>
+    <ellipse cx="0" cy="1" rx="6" ry="8.5" fill="#333333"/>
+    <circle cx="0" cy="-6.5" r="3.4" fill="#333333"/>
+    <circle cx="-1.1" cy="-7.4" r="0.9" fill="#FFFFFF" opacity="0.7"/>
+    <!-- highlight -->
+    <ellipse cx="-2.2" cy="-1.5" rx="2.2" ry="3" fill="#FFFFFF" opacity="0.22"/>
+  </g>
+</svg>

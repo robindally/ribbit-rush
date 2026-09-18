@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Ribbit Rush motorbike, faces right. Thin body (29px), fast, low mass. -->
+  <!-- wheels poke past the frame's top and bottom edges -->
+  <g fill="#22242A">
+    <circle cx="13.5" cy="24" r="7.4"/>
+    <circle cx="34.5" cy="24" r="7.4"/>
+  </g>
+  <g fill="#3A3C3F">
+    <circle cx="13.5" cy="24" r="3.2"/>
+    <circle cx="34.5" cy="24" r="3.2"/>
+  </g>
+  <!-- frame: front face then top face -->
+  <rect x="9.5" y="20.5" width="29" height="8.5" rx="4" fill="#222222"/>
+  <rect x="9.5" y="20.5" width="29" height="6.8" rx="4" fill="#2B2B2B" stroke="#252525" stroke-width="1.2"/>
+  <!-- rider -->
+  <ellipse cx="21" cy="15" rx="6.5" ry="8.5" fill="#E8474B" transform="rotate(-12 21 15)"/>
+  <circle cx="27.5" cy="9.5" r="5.2" fill="#1B2A1D"/>
+  <ellipse cx="26" cy="7.6" rx="1.8" ry="1.2" fill="#FFFFFF" opacity="0.3"/>
+  <!-- highlight -->
+  <ellipse cx="16" cy="22" rx="4.5" ry="1.6" fill="#FFFFFF" opacity="0.2"/>
+  <!-- headlight (front, right) and taillight (rear, left) -->
+  <circle cx="37.5" cy="24" r="1.8" fill="#FFF1A8"/>
+  <circle cx="10.5" cy="24" r="1.6" fill="#FF3B3B"/>
+</svg>

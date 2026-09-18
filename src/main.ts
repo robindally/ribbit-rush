@@ -1,7 +1,9 @@
 // Boots the game: renderer, sprites, input, save, scene manager, then starts the loop with the
 // Title scene. See ARCHITECTURE.md section 2 and docs/specs/M0-M2-classic-core.md.
 
-import '@fontsource/fredoka';
+import '@fontsource/fredoka/400.css';
+import '@fontsource/fredoka/600.css';
+import '@fontsource/fredoka/700.css';
 
 import { createAudioEngine } from './core/audio';
 import { attachInput } from './core/input';
@@ -20,6 +22,10 @@ async function boot(): Promise<void> {
   const save = loadSave();
   const atlas = await loadSprites();
   const renderer = createRenderer(canvas, atlas);
+
+  // Fredoka is used for every piece of on-canvas text (HUD, title, cards) from the first frame,
+  // so wait for it to be ready rather than risk a fallback-font flash. See ART_BIBLE.md section 8.
+  await document.fonts.ready;
 
   // Audio is a no-op stub until M5; created here so future milestones only need to wire it up.
   createAudioEngine();

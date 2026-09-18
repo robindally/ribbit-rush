@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 48" width="96" height="48">
+  <!-- Ribbit Rush bus, faces right. Tall object: 24%/26% front-face rule. Window strip. -->
+  <g fill="#22242A">
+    <rect x="12" y="8" width="9" height="7" rx="2.5"/>
+    <rect x="43.5" y="8" width="9" height="7" rx="2.5"/>
+    <rect x="75" y="8" width="9" height="7" rx="2.5"/>
+    <rect x="12" y="33" width="9" height="7" rx="2.5"/>
+    <rect x="43.5" y="33" width="9" height="7" rx="2.5"/>
+    <rect x="75" y="33" width="9" height="7" rx="2.5"/>
+  </g>
+  <!-- front face then top face -->
+  <rect x="3" y="11" width="90" height="26" rx="7" fill="#B36722"/>
+  <rect x="3" y="11" width="90" height="19.76" rx="7" fill="#F28B2E" stroke="#CE7627" stroke-width="1.5"/>
+  <!-- window strip -->
+  <g fill="#2B3A55">
+    <rect x="8" y="14" width="10.5" height="10.5" rx="3"/>
+    <rect x="21" y="14" width="10.5" height="10.5" rx="3"/>
+    <rect x="34" y="14" width="10.5" height="10.5" rx="3"/>
+    <rect x="47" y="14" width="10.5" height="10.5" rx="3"/>
+    <rect x="60" y="14" width="10.5" height="10.5" rx="3"/>
+    <rect x="73" y="14" width="14" height="10.5" rx="3"/>
+  </g>
+  <g fill="#9FB7E6" opacity="0.55">
+    <rect x="9.4" y="15.2" width="4" height="3.1" rx="1"/>
+    <rect x="22.4" y="15.2" width="4" height="3.1" rx="1"/>
+    <rect x="35.4" y="15.2" width="4" height="3.1" rx="1"/>
+    <rect x="48.4" y="15.2" width="4" height="3.1" rx="1"/>
+    <rect x="61.4" y="15.2" width="4" height="3.1" rx="1"/>
+  </g>
+  <!-- highlight -->
+  <ellipse cx="14" cy="14.5" rx="8" ry="2" fill="#FFFFFF" opacity="0.2"/>
+  <!-- headlight (front, right) and taillight (rear, left) -->
+  <rect x="90.5" y="13.5" width="3" height="4.8" rx="1.5" fill="#FFF1A8"/>
+  <rect x="90.5" y="24.5" width="3" height="4.8" rx="1.5" fill="#FFF1A8"/>
+  <rect x="2.7" y="14" width="3" height="4.8" rx="1.5" fill="#FF3B3B"/>
+  <rect x="2.7" y="25" width="3" height="4.8" rx="1.5" fill="#FF3B3B"/>
+</svg>

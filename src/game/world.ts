@@ -100,6 +100,7 @@ export class World {
         // Landing: run the full row resolution for the row just reached, before anything else
         // (including a buffered hop starting a new one) can move the frog again this tick.
         this.frog.state = 'idle';
+        this.frog.stateT = 0; // seconds in current state - render-only use (landing squash decay)
         this.onLanded();
         return;
       }
@@ -139,6 +140,8 @@ export class World {
     this.frog.hopT = 0;
     this.frog.facing = dir;
     this.frog.state = 'hopping';
+    this.frog.stateT = 0; // "seconds in current state" (ARCHITECTURE.md section 7) - render-only
+    // use (squash/stretch timing), no gameplay logic reads this during 'hopping'.
     gameEvents.emit({ type: 'hop', dir, forward: dir === 'up' });
   }
 
