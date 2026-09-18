@@ -7,6 +7,10 @@ and gamepad, and a phone that plays it end to end. Read bible sections 8 and 9 a
 ## 1. Screens
 
 - **Title.** Finish per bible: logo, animated river, frog hero, Start, Endless (locked until level
+  15 has been reached). Tuck the 1.5x frog behind the first R so only its eyes and the top of its
+  head show above the letter (currently its whole body juts out to the left). Add a grass bank
+  along the bottom of the title with the 3x hero sitting on it, and a slow parade of vehicles on a
+  road strip between the river band and the bank, so the title feels like the game. Start, Endless (locked until level
   15 has been reached; shows a lock), Leaderboard, Settings, How to play (one card with the
   controls and three tips). Focus ring and keyboard navigation between buttons.
 - **Level intro card.** Polished: world accent stripe, world name, level number, hazard icons with

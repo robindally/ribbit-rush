@@ -59,6 +59,9 @@ composed as engine + car + car, `floe-2` (2x1) and `floe-3` (3x1) with three cra
 drawn only in the `cracking` state, `streetlamp` (1x1), `crossing-signal` (1x1, two lights),
 `rail` (1x1 tileable), `oil` (1x1 decal, dark iridescent ellipse).
 
+Also touch up `motorbike.svg`: the rider's two shoulder ellipses sit directly behind the helmet
+along the direction of travel (same y as the helmet centre, to its left), not stacked diagonally.
+
 ## 6. Levels (`game/level.ts`)
 
 - Replace `makeClassicLevel` with `getLevel(n: 1..15): LevelDef` built from the world base tables
