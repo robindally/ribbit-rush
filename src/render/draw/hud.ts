@@ -78,7 +78,7 @@ export function drawHud(r: Renderer, hud: HudState): void {
     hud.multiplierPulseT < MULTIPLIER_PULSE_S
       ? 1 + 0.35 * (1 - hud.multiplierPulseT / MULTIPLIER_PULSE_S)
       : 1;
-  const badgeAlpha = hud.multiplier > 1 ? 1 : 0.25;
+  const badgeAlpha = hud.multiplier > 1 ? 1 : 0;
   r.ctx.save();
   r.ctx.globalAlpha = badgeAlpha;
   r.ctx.translate(150, topY);
