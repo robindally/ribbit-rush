@@ -1,6 +1,7 @@
 import type { Scene, SceneManager } from '../core/loop';
 import type { SaveData } from '../core/save';
 import { writeSave } from '../core/save';
+import * as transitions from '../fx/transitions';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../game/constants';
 import { getWorldTheme } from '../game/themes';
 import type { InputAction } from '../game/types';
@@ -25,8 +26,8 @@ export class GameOverScene implements Scene {
     writeSave(this.save);
   }
 
-  update(_dt: number): void {
-    /* nothing animates yet - M4 adds transitions */
+  update(dt: number): void {
+    transitions.update(dt);
   }
 
   render(r: Renderer, _alpha: number): void {
@@ -76,11 +77,14 @@ export class GameOverScene implements Scene {
       align: 'center',
       color: INK,
     });
+
+    transitions.render(r);
   }
 
   onAction(a: InputAction): void {
+    if (transitions.isActive()) return; // ignore input mid-wipe
     if (a.type === 'confirm' || a.type === 'back') {
-      this.scenes.replace(new TitleScene(this.scenes, this.save));
+      transitions.play(() => this.scenes.replace(new TitleScene(this.scenes, this.save)));
     }
   }
 }

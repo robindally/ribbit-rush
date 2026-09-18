@@ -12,6 +12,9 @@ import {
   HOME_HAZARD_MIN_S,
   HOME_ROW,
   HOP_S,
+  NEAR_MISS_COMBO_WINDOW_S,
+  NEAR_MISS_SCORE_PER_COMBO,
+  NEAR_MISS_WATCH_S,
   START_LIVES,
 } from './constants';
 import { platformAt, vehicleHits } from './collision';
@@ -19,8 +22,34 @@ import { bufferHop, computeHopTarget, consumeHop, createFrog, createHopBuffer } 
 import type { HopBuffer } from './frog';
 import { makeClassicLevel } from './level';
 import { stepLane } from './lanes';
-import { extraLivesEarned, flyScore, forwardHopScore, homeScore, levelClearScore } from './scoring';
+import {
+  advanceStreak,
+  createStreakState,
+  extraLivesEarned,
+  flyScore,
+  forwardHopScore,
+  homeScore,
+  levelClearScore,
+} from './scoring';
+import type { StreakHopKind, StreakState } from './scoring';
 import type { DeathCause, Dir, Frog, HomeSlotState, LaneDef, LevelDef } from './types';
+
+const TIMER_LOW_S = 5; // docs/specs/M4-juice.md section 8
+
+/** Combo state for the near-miss chain: consecutive near-misses within `NEAR_MISS_COMBO_WINDOW_S`
+ * of each other build the combo; a longer gap restarts it at 1. Pure and exported so the chaining
+ * rule is directly unit-testable. See docs/specs/M4-juice.md section 5. */
+export interface NearMissState {
+  combo: number;
+  at: number;
+}
+
+export function advanceNearMissCombo(prev: NearMissState | null, now: number): NearMissState {
+  if (prev && now - prev.at <= NEAR_MISS_COMBO_WINDOW_S) {
+    return { combo: prev.combo + 1, at: now };
+  }
+  return { combo: 1, at: now };
+}
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
@@ -42,12 +71,19 @@ export class World {
   timeLeft: number;
   elapsed = 0;
   gameOver = false;
+  /** Total near-misses this run (run stats, ART_BIBLE.md section 9's game-over screen). */
+  nearMissCount = 0;
+  streak: StreakState = createStreakState();
 
   private rng: Rng;
   private hopBuffer: HopBuffer = createHopBuffer();
   private crocState: HazardState | null = null;
   private flyState: HazardState | null = null;
   private hazardRollAccumulator = { croc: 0, fly: 0 };
+  private nearMissState: NearMissState | null = null;
+  private nearMissWatch: { row: number; x: number; expiresAt: number } | null = null;
+  private timerLowFired = false;
+  private tickAccumulator = 0;
 
   constructor(level: LevelDef, levelNumber = 1, seed = 1) {
     this.level = level;
@@ -85,12 +121,14 @@ export class World {
     this.elapsed += dt;
     for (const lane of this.lanes) stepLane(lane, dt);
     this.updateHomeHazards(dt);
+    this.updateNearMissWatch();
 
     this.timeLeft -= dt;
     if (this.timeLeft <= 0) {
       this.die('timeout');
       return;
     }
+    this.updateTimerLow(dt);
 
     if (this.frog.state === 'hopping') {
       this.frog.hopT = Math.min(1, this.frog.hopT + dt / HOP_S);
@@ -128,7 +166,7 @@ export class World {
   private tryHop(dir: Dir): void {
     const target = computeHopTarget(this.frog, dir);
     if (target.blocked) {
-      gameEvents.emit({ type: 'bonk' });
+      gameEvents.emit({ type: 'bonk', x: this.frog.x, row: this.frog.row });
       return;
     }
 
@@ -148,16 +186,96 @@ export class World {
   private onLanded(): void {
     const frog = this.frog;
 
+    // Streak multiplier (docs/specs/M4-juice.md section 6): advanced from the just-completed
+    // hop's facing (still the hop's own direction - the frog doesn't turn again until its next
+    // hop starts), before this landing's own score is computed, so a hop that completes a chain
+    // scores at its new, raised multiplier immediately.
+    const kind: StreakHopKind =
+      frog.facing === 'up' ? 'forward' : frog.facing === 'down' ? 'backward' : 'side';
+    const prevMultiplier = this.streak.multiplier;
+    this.streak = advanceStreak(this.streak, kind, this.elapsed);
+    if (this.streak.multiplier > prevMultiplier) {
+      gameEvents.emit({
+        type: 'score',
+        delta: 0,
+        x: frog.x,
+        row: frog.row,
+        label: `x${this.streak.multiplier}`,
+      });
+    }
+
     if (frog.row < frog.maxRow) {
       frog.maxRow = frog.row;
-      this.addScore(forwardHopScore(true));
+      const delta = forwardHopScore(true) * this.streak.multiplier;
+      this.addScore(delta, `+${delta}`);
     }
+
+    // Near-miss watch (docs/specs/M4-juice.md section 5): arm only when the tile just vacated
+    // was a road lane. The watch itself is checked every simulation step in `update()` while it
+    // remains armed.
+    const fromLane = this.laneAt(frog.fromRow);
+    if (fromLane?.kind === 'road') {
+      this.nearMissWatch = {
+        row: frog.fromRow,
+        x: frog.fromX,
+        expiresAt: this.elapsed + NEAR_MISS_WATCH_S,
+      };
+    }
+
+    const lane = this.laneAt(frog.row);
+    gameEvents.emit({
+      type: 'land',
+      surface: lane?.kind === 'river' ? 'platform' : 'ground',
+      x: frog.x,
+      row: frog.row,
+    });
 
     this.resolveLandingRow();
     if (this.gameOver || (this.frog.state as Frog['state']) === 'dying') return;
 
     const next = consumeHop(this.hopBuffer);
     if (next) this.tryHop(next);
+  }
+
+  /** Checks the tile watched by an armed near-miss window every step; see `onLanded`. */
+  private updateNearMissWatch(): void {
+    const watch = this.nearMissWatch;
+    if (!watch) return;
+
+    const lane = this.laneAt(watch.row);
+    const hitbox: [number, number] = [watch.x + 0.2, watch.x + 0.8];
+    if (lane && vehicleHits(lane, hitbox)) {
+      this.nearMissWatch = null;
+      this.triggerNearMiss();
+      return;
+    }
+    if (this.elapsed >= watch.expiresAt) {
+      this.nearMissWatch = null;
+    }
+  }
+
+  private triggerNearMiss(): void {
+    const combo = advanceNearMissCombo(this.nearMissState, this.elapsed);
+    this.nearMissState = combo;
+    this.nearMissCount += 1;
+    gameEvents.emit({ type: 'nearMiss', combo: combo.combo });
+    const delta = NEAR_MISS_SCORE_PER_COMBO * combo.combo * this.streak.multiplier;
+    this.addScore(delta, `CLOSE CALL! +${delta}`);
+  }
+
+  private updateTimerLow(dt: number): void {
+    if (!this.timerLowFired && this.timeLeft < TIMER_LOW_S) {
+      this.timerLowFired = true;
+      gameEvents.emit({ type: 'timerLow' });
+      this.tickAccumulator = 0;
+    }
+    if (!this.timerLowFired) return;
+
+    this.tickAccumulator += dt;
+    while (this.tickAccumulator >= 1) {
+      this.tickAccumulator -= 1;
+      gameEvents.emit({ type: 'tick' });
+    }
   }
 
   /**
@@ -239,16 +357,19 @@ export class World {
 
     if (occupant === 'fly') {
       this.clearHazard('fly', slot);
-      this.addScore(flyScore());
+      const flyDelta = flyScore(); // fly bonus is not streak-multiplied (spec section 6)
+      this.addScore(flyDelta, `+${flyDelta} FLY`);
     }
 
     this.homes[slot] = 'frog';
     const bonus = this.timeLeft;
-    this.addScore(homeScore(bonus));
+    const homeDelta = homeScore(bonus) * this.streak.multiplier;
+    this.addScore(homeDelta, `+${homeDelta}`);
     gameEvents.emit({ type: 'home', slot, timeLeft: this.timeLeft, bonus: occupant === 'fly' });
 
     if (this.homes.every((h) => h === 'frog')) {
-      this.addScore(levelClearScore());
+      const clearDelta = levelClearScore(); // not streak-multiplied (spec section 6)
+      this.addScore(clearDelta, `+${clearDelta}`);
       gameEvents.emit({ type: 'levelClear', level: this.levelNumber });
       this.loadNextLevel();
       return;
@@ -299,6 +420,8 @@ export class World {
     this.frog.state = 'dying';
     this.frog.deathCause = cause;
     this.frog.stateT = 0;
+    this.streak = createStreakState(); // death resets the streak (spec section 6)
+    this.nearMissWatch = null;
     gameEvents.emit({ type: 'death', cause, x: this.frog.x, row: this.frog.row });
   }
 
@@ -321,6 +444,9 @@ export class World {
     this.crocState = null;
     this.flyState = null;
     this.hazardRollAccumulator = { croc: 0, fly: 0 };
+    this.nearMissWatch = null;
+    this.timerLowFired = false;
+    this.tickAccumulator = 0;
     for (let i = 0; i < this.homes.length; i++) {
       const value = this.homes[i];
       if (value === 'croc' || value === 'fly') this.homes[i] = null;
@@ -335,15 +461,15 @@ export class World {
     this.respawnFrogOnly();
   }
 
-  private addScore(delta: number): void {
+  private addScore(delta: number, label?: string): void {
     if (delta === 0) return;
     const prev = this.score;
     this.score += delta;
-    gameEvents.emit({ type: 'score', delta, x: this.frog.x, row: this.frog.row });
+    gameEvents.emit({ type: 'score', delta, x: this.frog.x, row: this.frog.row, label });
     const extra = extraLivesEarned(prev, this.score);
     for (let i = 0; i < extra; i++) {
       this.lives += 1;
-      gameEvents.emit({ type: 'extraLife' });
+      gameEvents.emit({ type: 'extraLife', x: this.frog.x, row: this.frog.row });
     }
   }
 }

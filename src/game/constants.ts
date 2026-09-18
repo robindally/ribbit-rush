@@ -40,6 +40,17 @@ export const START_LIVES = 3;
 export const HOME_HAZARD_MIN_S = 4;
 export const HOME_HAZARD_MAX_S = 8;
 
+// Near-miss (docs/specs/M4-juice.md section 5)
+export const NEAR_MISS_WATCH_S = 0.15; // how long the vacated tile is watched after a hop lands
+export const NEAR_MISS_COMBO_WINDOW_S = 2; // consecutive near-misses within this chain the combo
+export const NEAR_MISS_SCORE_PER_COMBO = 50; // delta = this * combo * streak multiplier
+
+// Streak multiplier (docs/specs/M4-juice.md section 6)
+export const STREAK_GAP_S = 0.35; // forward hops must land less than this apart to chain
+export const STREAK_IDLE_RESET_S = 0.6; // any idle gap over this resets the streak
+export const STREAK_HOPS_PER_TIER = 3; // every N consecutive forward hops raises the multiplier
+export const STREAK_MULTIPLIER_CAP = 4;
+
 // Canvas logical size
 export const CANVAS_WIDTH = COLS * TILE; // 624
 export const CANVAS_HEIGHT = ROWS * TILE; // 720

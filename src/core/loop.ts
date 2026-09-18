@@ -1,6 +1,7 @@
 // Fixed-step loop and scene manager. See ARCHITECTURE.md section 4.
 
 import type { InputAction } from '../game/types';
+import * as hitstop from '../fx/hitstop';
 import type { Renderer } from '../render/renderer';
 import { inputEvents } from './events';
 import { pollGamepad } from './input';
@@ -94,11 +95,20 @@ export function startLoop(scenes: SceneManager, renderer: Renderer): LoopHandle 
     let frameS = (now - last) / 1000;
     last = now;
     if (frameS > MAX_FRAME_S) frameS = MAX_FRAME_S;
-    accumulator += frameS;
 
-    while (accumulator >= DT) {
-      scenes.current().update(DT);
-      accumulator -= DT;
+    // Hit-stop / slow motion (ARCHITECTURE.md section 4, docs/specs/M4-juice.md section 3): a
+    // hard pause skips the fixed step entirely this frame - the accumulator doesn't advance
+    // either, so the same interpolated frame keeps rendering, which *is* the freeze. A slow-mo
+    // scale instead shrinks how much simulated time each fixed step advances, without changing
+    // how many steps run per real second.
+    hitstop.tick(frameS * 1000);
+    if (!hitstop.isPaused()) {
+      accumulator += frameS;
+      const timeScale = hitstop.getTimeScale();
+      while (accumulator >= DT) {
+        scenes.current().update(DT * timeScale);
+        accumulator -= DT;
+      }
     }
 
     const alpha = accumulator / DT;

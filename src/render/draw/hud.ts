@@ -20,6 +20,10 @@ export interface HudState {
   timeLeft: number;
   timeLimit: number;
   elapsed: number;
+  /** Current streak multiplier (docs/specs/M4-juice.md section 6), 1-4. */
+  multiplier: number;
+  /** Seconds since `multiplier` last changed, driving the badge's pulse-on-change. */
+  multiplierPulseT: number;
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -66,6 +70,25 @@ export function drawHud(r: Renderer, hud: HudState): void {
     color: CREAM,
     outline: INK,
   });
+
+  // Streak multiplier badge, beside the score: pulses briefly when it changes, fades to a quiet
+  // 25% when it's back to x1 (docs/specs/M4-juice.md section 6).
+  const MULTIPLIER_PULSE_S = 0.25;
+  const pulseScale =
+    hud.multiplierPulseT < MULTIPLIER_PULSE_S
+      ? 1 + 0.35 * (1 - hud.multiplierPulseT / MULTIPLIER_PULSE_S)
+      : 1;
+  const badgeAlpha = hud.multiplier > 1 ? 1 : 0.25;
+  r.ctx.save();
+  r.ctx.globalAlpha = badgeAlpha;
+  r.ctx.translate(150, topY);
+  r.ctx.scale(pulseScale, pulseScale);
+  r.ctx.fillStyle = GOLD;
+  r.ctx.beginPath();
+  r.ctx.arc(0, 0, 15, 0, Math.PI * 2);
+  r.ctx.fill();
+  r.text(`x${hud.multiplier}`, 0, 0, { size: 16, weight: 700, align: 'center', color: INK });
+  r.ctx.restore();
 
   const bottomY = HUD_BOTTOM_ROW * TILE;
 

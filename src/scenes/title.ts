@@ -1,5 +1,6 @@
 import type { Scene, SceneManager } from '../core/loop';
 import type { SaveData } from '../core/save';
+import * as transitions from '../fx/transitions';
 import { CANVAS_HEIGHT, CANVAS_WIDTH, TILE } from '../game/constants';
 import { getWorldTheme } from '../game/themes';
 import type { InputAction, LaneDef } from '../game/types';
@@ -155,6 +156,7 @@ export class TitleScene implements Scene {
   update(dt: number): void {
     this.elapsed += dt;
     tickBlink(this.heroBlink, dt);
+    transitions.update(dt);
   }
 
   render(r: Renderer, _alpha: number): void {
@@ -228,9 +230,12 @@ export class TitleScene implements Scene {
       outline: '#1B2A1D',
     });
     r.ctx.restore();
+
+    transitions.render(r);
   }
 
   onAction(_a: InputAction): void {
-    this.scenes.replace(new PlayScene(this.scenes, this.save));
+    if (transitions.isActive()) return; // ignore input mid-wipe
+    transitions.play(() => this.scenes.replace(new PlayScene(this.scenes, this.save)));
   }
 }

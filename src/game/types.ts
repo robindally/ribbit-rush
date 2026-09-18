@@ -92,15 +92,16 @@ export type HomeSlotState = null | 'frog' | 'croc' | 'fly';
 
 export type GameEvent =
   | { type: 'hop'; dir: Dir; forward: boolean }
-  | { type: 'bonk' }
-  | { type: 'land'; surface: 'ground' | 'platform' }
+  | { type: 'bonk'; x: number; row: number }
+  | { type: 'land'; surface: 'ground' | 'platform'; x: number; row: number }
   | { type: 'death'; cause: DeathCause; x: number; row: number }
   | { type: 'home'; slot: number; timeLeft: number; bonus: boolean }
   | { type: 'levelClear'; level: number }
   | { type: 'nearMiss'; combo: number }
   | { type: 'score'; delta: number; x: number; row: number; label?: string }
-  | { type: 'extraLife' }
+  | { type: 'extraLife'; x: number; row: number }
   | { type: 'timerLow' }
+  | { type: 'tick' }
   | { type: 'powerup'; kind: string }
   | { type: 'gameOver'; score: number };
 

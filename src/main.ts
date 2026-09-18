@@ -9,6 +9,9 @@ import { createAudioEngine } from './core/audio';
 import { attachInput } from './core/input';
 import { startLoop, Scenes } from './core/loop';
 import { loadSave } from './core/save';
+import { setReduceMotion as setHitstopReduceMotion } from './fx/hitstop';
+import { setReduceMotion as setShakeReduceMotion } from './fx/shake';
+import { setReduceMotion as setTransitionsReduceMotion } from './fx/transitions';
 import { createRenderer } from './render/renderer';
 import { loadSprites } from './render/sprites';
 import { TitleScene } from './scenes/title';
@@ -20,6 +23,12 @@ async function boot(): Promise<void> {
   }
 
   const save = loadSave();
+  // M8 builds the settings UI; for now `reduceMotion` is read once from the save at boot and
+  // applied to every fx module that respects it (docs/specs/M4-juice.md section 10).
+  setHitstopReduceMotion(save.settings.reduceMotion);
+  setShakeReduceMotion(save.settings.reduceMotion);
+  setTransitionsReduceMotion(save.settings.reduceMotion);
+
   const atlas = await loadSprites();
   const renderer = createRenderer(canvas, atlas);
 
