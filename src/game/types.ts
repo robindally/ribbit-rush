@@ -59,7 +59,15 @@ export interface LaneDef {
 
 export type FrogState = 'idle' | 'hopping' | 'dying' | 'dead' | 'home';
 
-export type DeathCause = 'squish' | 'drown' | 'timeout' | 'croc' | 'hedge' | 'snake' | 'offscreen';
+export type DeathCause =
+  | 'squish'
+  | 'drown'
+  | 'timeout'
+  | 'croc'
+  | 'hedge'
+  | 'snake'
+  | 'offscreen'
+  | 'occupied';
 
 export interface Frog {
   x: number;

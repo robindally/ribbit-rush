@@ -109,7 +109,8 @@ export type InputAction =
   | { type: 'any' };
 ```
 
-Keyboard: arrows and WASD hop, Enter/Space confirm, Escape/P pause. Touch: swipe of 24 px or
+Keyboard: arrows and WASD hop, Enter/Space confirm, Escape/P pause. Match on `e.code`, and fall
+back to `e.key` when `code` is empty (some virtual keyboards and automation send no code). Touch: swipe of 24 px or
 more in a direction hops, a tap hops up. Gamepad: d-pad and left stick with a 0.5 deadzone and
 edge detection. All sources emit `InputAction` through `events.ts`. The Play scene keeps a
 one-deep hop buffer.
@@ -128,6 +129,7 @@ export interface MoverDef {
   width: number;         // tiles
   type: MoverType;
   dive?: DiveDef;        // turtles only
+  speed?: number;        // overrides the lane speed for this mover (M6: jet skis, otters, snakes)
 }
 
 export type LaneKind = 'road' | 'river' | 'rail' | 'median' | 'bank' | 'home';
@@ -154,7 +156,8 @@ export interface LaneDef {
 
 ```ts
 export type FrogState = 'idle' | 'hopping' | 'dying' | 'dead' | 'home';
-export type DeathCause = 'squish' | 'drown' | 'timeout' | 'croc' | 'hedge' | 'snake' | 'offscreen';
+export type DeathCause =
+  | 'squish' | 'drown' | 'timeout' | 'croc' | 'hedge' | 'snake' | 'offscreen' | 'occupied';
 
 export interface Frog {
   x: number; row: number;            // current, x is a float
@@ -174,6 +177,11 @@ export interface Frog {
 - Bounds: cannot hop below row 13, cannot hop left of x=0 or right of x=12, cannot hop into a
   hedge column of row 1.
 - Hitbox for vehicles: `[x + 0.2, x + 0.8]`. Platform test uses centre `x + 0.5`.
+- **Hop-time collision rule.** `row` commits to the target at hop start, but while `state ===
+  'hopping'`: no platform or drown check at all; vehicle checks run against the target row only
+  once `hopT >= 0.5`. On landing (`hopT` reaches 1) run the full row resolution. While idle,
+  every step checks vehicles (road) or platform (river). This keeps deaths matching what the
+  player sees.
 - Death sequence lasts `DEATH_S = 0.9`, then respawn at start with a fresh timer, or Game Over.
 
 ## 8. World (one running level)

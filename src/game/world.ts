@@ -95,17 +95,29 @@ export class World {
     if (this.frog.state === 'hopping') {
       this.frog.hopT = Math.min(1, this.frog.hopT + dt / HOP_S);
       this.frog.x = lerp(this.frog.fromX, this.frog.toX, this.frog.hopT);
+
       if (this.frog.hopT >= 1) {
+        // Landing: run the full row resolution for the row just reached, before anything else
+        // (including a buffered hop starting a new one) can move the frog again this tick.
         this.frog.state = 'idle';
         this.onLanded();
-        if (this.gameOver) return;
-        const state = this.frog.state as Frog['state'];
-        if (state === 'dying' || state === 'home') return;
+        return;
       }
+
+      if (this.frog.hopT >= 0.5) {
+        // Mid-hop: only a vehicle hit against the target row counts (row already committed at
+        // hop start); no platform/drown check runs while airborne. See ARCHITECTURE.md
+        // section 7, "Hop-time collision rule".
+        const lane = this.laneAt(this.frog.row);
+        if (lane) {
+          const hitbox: [number, number] = [this.frog.x + 0.2, this.frog.x + 0.8];
+          if (vehicleHits(lane, hitbox)) this.die('squish');
+        }
+      }
+      return;
     }
 
-    const state = this.frog.state as Frog['state'];
-    if (state === 'idle' || state === 'hopping') {
+    if (this.frog.state === 'idle') {
       this.resolveRowEffects(dt);
     }
   }
@@ -138,13 +150,38 @@ export class World {
       this.addScore(forwardHopScore(true));
     }
 
-    if (frog.row === HOME_ROW) {
-      this.resolveHomeLanding();
-      if (this.gameOver || (this.frog.state as Frog['state']) === 'dying') return;
-    }
+    this.resolveLandingRow();
+    if (this.gameOver || (this.frog.state as Frog['state']) === 'dying') return;
 
     const next = consumeHop(this.hopBuffer);
     if (next) this.tryHop(next);
+  }
+
+  /**
+   * Full row resolution for the row the frog just landed on (hopT reached 1): home row as
+   * today, a road row runs the vehicle check, a river row drowns the frog unless a platform is
+   * under its centre. See ARCHITECTURE.md section 7, "Hop-time collision rule".
+   */
+  private resolveLandingRow(): void {
+    const frog = this.frog;
+    if (frog.row === HOME_ROW) {
+      this.resolveHomeLanding();
+      return;
+    }
+
+    const lane = this.laneAt(frog.row);
+    if (!lane) return;
+
+    if (lane.kind === 'road') {
+      const hitbox: [number, number] = [frog.x + 0.2, frog.x + 0.8];
+      if (vehicleHits(lane, hitbox)) this.die('squish');
+      return;
+    }
+
+    if (lane.kind === 'river') {
+      const centre = frog.x + 0.5;
+      if (!platformAt(lane, centre, this.elapsed)) this.die('drown');
+    }
   }
 
   private resolveRowEffects(dt: number): void {
@@ -189,7 +226,7 @@ export class World {
 
     const occupant = this.homes[slot];
     if (occupant === 'frog') {
-      this.die('squish'); // occupied slot: no dedicated DeathCause exists, closest is squish
+      this.die('occupied');
       return;
     }
     if (occupant === 'croc') {

@@ -8,6 +8,9 @@ Fable has placed the reference sprites in `assets/sprites/`: `frog-idle`, `frog-
 `log-end`, `log-mid`, `turtle`, `lilypad`. Study them before drawing anything new. Every new sprite
 must look like it came from the same hand.
 
+Keep the dev-only hook `window.__rr = { world }` in `src/scenes/play.ts`; the reviewer's bot in
+`scripts/playbot.js` depends on it. Add `scenes` to that object too.
+
 ## Deliverables
 
 ### 1. Sprite pipeline

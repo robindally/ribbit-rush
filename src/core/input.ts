@@ -19,28 +19,63 @@ const KEY_DIR: Record<string, Dir> = {
   KeyD: 'right',
 };
 
+// Fallback mapping by `e.key`, used only when `e.code` is empty (some virtual keyboards and
+// automation send no code). See ARCHITECTURE.md section 5.
+const KEY_FALLBACK_DIR: Record<string, Dir> = {
+  ArrowUp: 'up',
+  ArrowDown: 'down',
+  ArrowLeft: 'left',
+  ArrowRight: 'right',
+  w: 'up',
+  W: 'up',
+  s: 'down',
+  S: 'down',
+  a: 'left',
+  A: 'left',
+  d: 'right',
+  D: 'right',
+};
+
 function emit(action: InputAction): void {
   inputEvents.emit(action);
+}
+
+/** The subset of `KeyboardEvent` the mapping needs, so the pure mapping is directly testable. */
+export interface KeyLike {
+  code: string;
+  key: string;
+}
+
+/**
+ * Pure code/key -> InputAction mapping, with no DOM dependency. Matches on `code` first; when
+ * `code` is empty, falls back to `key` (ArrowUp/Down/Left/Right, w/a/s/d in either case, Enter,
+ * ' ', Escape, p/P). Behaviour is unchanged when `code` is present. Returns null when nothing
+ * matches.
+ */
+export function mapKeyToAction(e: KeyLike): InputAction | null {
+  if (e.code) {
+    const dir = KEY_DIR[e.code];
+    if (dir) return { type: 'hop', dir };
+    if (e.code === 'Enter' || e.code === 'Space') return { type: 'confirm' };
+    if (e.code === 'Escape' || e.code === 'KeyP') return { type: 'pause' };
+    return null;
+  }
+
+  // `code` is empty: fall back to `key`.
+  const dir = KEY_FALLBACK_DIR[e.key];
+  if (dir) return { type: 'hop', dir };
+  if (e.key === 'Enter' || e.key === ' ') return { type: 'confirm' };
+  if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') return { type: 'pause' };
+  return null;
 }
 
 function onKeyDown(e: KeyboardEvent): void {
   if (e.repeat) return; // no OS auto-repeat hops
 
-  const dir = KEY_DIR[e.code];
-  if (dir) {
+  const action = mapKeyToAction(e);
+  if (action) {
     e.preventDefault();
-    emit({ type: 'hop', dir });
-    return;
-  }
-  if (e.code === 'Enter' || e.code === 'Space') {
-    e.preventDefault();
-    emit({ type: 'confirm' });
-    return;
-  }
-  if (e.code === 'Escape' || e.code === 'KeyP') {
-    e.preventDefault();
-    emit({ type: 'pause' });
-    return;
+    emit(action);
   }
 }
 
