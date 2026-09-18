@@ -1,10 +1,13 @@
 import type { Scene, SceneManager } from '../core/loop';
+import * as audio from '../core/audio';
 import type { SaveData } from '../core/save';
+import * as music from '../audio/music';
 import * as transitions from '../fx/transitions';
 import { CANVAS_HEIGHT, CANVAS_WIDTH, TILE } from '../game/constants';
 import { getWorldTheme } from '../game/themes';
 import type { InputAction, LaneDef } from '../game/types';
 import { createBlinkState, frogIdleBreath, tickBlink, type BlinkState } from '../render/anim';
+import { drawAudioHint } from '../render/draw/hud';
 import { drawWaterAnimated } from '../render/draw/water';
 import { drawSpriteImage, type Renderer } from '../render/renderer';
 import { preloadSpriteAt, spriteAt } from '../render/sprites';
@@ -153,6 +156,12 @@ export class TitleScene implements Scene {
     void preloadSpriteAt('frog-idle', LOGO_FROG_SCALE);
   }
 
+  enter(): void {
+    // World 1 patterns at the fixed title tempo, no kick/snare (docs/specs/M5-audio.md section 3).
+    music.play(1, { title: true });
+    audio.playSfx('croak'); // "title start" (docs/specs/M5-audio.md section 2)
+  }
+
   update(dt: number): void {
     this.elapsed += dt;
     tickBlink(this.heroBlink, dt);
@@ -231,11 +240,13 @@ export class TitleScene implements Scene {
     });
     r.ctx.restore();
 
+    drawAudioHint(r, !audio.hasStarted());
     transitions.render(r);
   }
 
   onAction(_a: InputAction): void {
     if (transitions.isActive()) return; // ignore input mid-wipe
+    audio.playSfx('uiConfirm');
     transitions.play(() => this.scenes.replace(new PlayScene(this.scenes, this.save)));
   }
 }

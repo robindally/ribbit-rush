@@ -1,3 +1,4 @@
+/* global process, console, window */
 // Headless review harness for Ribbit Rush. Launches Chromium, starts a run on a dev server, injects
 // scripts/playbot.js, lets the bot play for N seconds while taking screenshots, and prints a JSON
 // summary (score, homes, deaths with causes, console errors). Used by Fable to review milestones
@@ -5,6 +6,9 @@
 //
 //   node scripts/review.mjs [--url http://localhost:5173] [--secs 25] [--shots docs/screens/review] [--every 5]
 //   Optional: --level N  (uses the dev level-jump hook once M6 adds it)
+//
+// `window` above covers the `page.evaluate(...)` callbacks, which run in the browser, not Node -
+// same `/* global */` convention scripts/playbot.js already uses for its own browser globals.
 
 import { chromium } from 'playwright';
 import fs from 'node:fs';

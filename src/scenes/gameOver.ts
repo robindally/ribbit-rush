@@ -1,4 +1,5 @@
 import type { Scene, SceneManager } from '../core/loop';
+import * as audio from '../core/audio';
 import type { SaveData } from '../core/save';
 import { writeSave } from '../core/save';
 import * as transitions from '../fx/transitions';
@@ -84,6 +85,7 @@ export class GameOverScene implements Scene {
   onAction(a: InputAction): void {
     if (transitions.isActive()) return; // ignore input mid-wipe
     if (a.type === 'confirm' || a.type === 'back') {
+      audio.playSfx('uiConfirm');
       transitions.play(() => this.scenes.replace(new TitleScene(this.scenes, this.save)));
     }
   }

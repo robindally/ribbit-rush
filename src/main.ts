@@ -5,7 +5,8 @@ import '@fontsource/fredoka/400.css';
 import '@fontsource/fredoka/600.css';
 import '@fontsource/fredoka/700.css';
 
-import { createAudioEngine } from './core/audio';
+import * as audio from './core/audio';
+import * as music from './audio/music';
 import { attachInput } from './core/input';
 import { startLoop, Scenes } from './core/loop';
 import { loadSave } from './core/save';
@@ -36,8 +37,21 @@ async function boot(): Promise<void> {
   // so wait for it to be ready rather than risk a fallback-font flash. See ART_BIBLE.md section 8.
   await document.fonts.ready;
 
-  // Audio is a no-op stub until M5; created here so future milestones only need to wire it up.
-  createAudioEngine();
+  // Web Audio engine: creates the AudioContext lazily on the first user gesture, reads initial
+  // volumes/mute from the save, and self-subscribes to GameEvent for every SFX (docs/specs/
+  // M5-audio.md). Scenes call `music.play`/`stop` directly (see scenes/title.ts, scenes/play.ts),
+  // the same way M4's fx/transitions.ts is called directly by scenes for presentation.
+  audio.init(save);
+  if (import.meta.env.DEV) {
+    const w = window as unknown as { __rr?: Record<string, unknown> };
+    // `devHook()` objects use live getters (stats, started, playing, ...) so they read fresh
+    // every time the reviewer inspects them - spreading them (`{ ...audio.devHook() }`) would
+    // invoke each getter once and freeze the result as a stale snapshot, so attach `music`'s hook
+    // as a plain property on audio's instead of merging the two objects.
+    const audioHook = audio.devHook() as Record<string, unknown>;
+    audioHook.music = music.devHook();
+    w.__rr = { ...w.__rr, audio: audioHook };
+  }
 
   attachInput(canvas);
 

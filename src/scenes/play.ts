@@ -1,6 +1,8 @@
 import type { Scene, SceneManager } from '../core/loop';
+import * as audio from '../core/audio';
 import { gameEvents } from '../core/events';
 import type { SaveData } from '../core/save';
+import * as music from '../audio/music';
 import * as particles from '../fx/particles';
 import * as popups from '../fx/popups';
 import * as shake from '../fx/shake';
@@ -13,7 +15,7 @@ import type { InputAction } from '../game/types';
 import type { Renderer } from '../render/renderer';
 import { buildStaticLayer, drawHomeSlots, drawStaticLayer } from '../render/draw/background';
 import { drawFrog, drawLaneMovers } from '../render/draw/entities';
-import { drawHud } from '../render/draw/hud';
+import { drawAudioHint, drawHud } from '../render/draw/hud';
 import { createBlinkState, tickBlink, type BlinkState } from '../render/anim';
 import { drawPlatformContactShadows, drawWaterAnimated } from '../render/draw/water';
 import { GameOverScene } from './gameOver';
@@ -32,6 +34,7 @@ export class PlayScene implements Scene {
   private frogBlink: BlinkState = createBlinkState();
   private lastMultiplier = 1;
   private multiplierPulseT = 1; // >= the pulse window, so it starts settled
+  private lastMusicWorld: 1 | 2 | 3 | 4 | 5 | null = null;
 
   constructor(
     private scenes: SceneManager,
@@ -43,8 +46,11 @@ export class PlayScene implements Scene {
     if (import.meta.env.DEV) {
       // Dev-only hook so reviewers and bots can inspect the running world, scene stack, and fx
       // state (docs/specs/M4-juice.md: "expose fx on it: window.__rr.fx with the particle
-      // count").
-      (window as unknown as { __rr?: unknown }).__rr = {
+      // count"). Merged onto any existing window.__rr (audio's dev hook is installed once at boot
+      // by main.ts, docs/specs/M5-audio.md) rather than replacing it wholesale.
+      const w = window as unknown as { __rr?: Record<string, unknown> };
+      w.__rr = {
+        ...w.__rr,
         world: this.world,
         scenes: this.scenes,
         fx: {
@@ -61,6 +67,9 @@ export class PlayScene implements Scene {
   }
 
   enter(): void {
+    this.lastMusicWorld = this.world.level.world;
+    music.play(this.world.level.world);
+    audio.enableAmbientHorn();
     this.unsubscribe = gameEvents.onAny((e) => {
       if (e.type === 'gameOver') {
         const frog = this.world.frog;
@@ -80,6 +89,7 @@ export class PlayScene implements Scene {
   exit(): void {
     this.unsubscribe?.();
     this.unsubscribe = null;
+    audio.disableAmbientHorn();
   }
 
   private buildStaticLayerForCurrentLevel(): HTMLCanvasElement {
@@ -92,6 +102,13 @@ export class PlayScene implements Scene {
     this.world.update(dt);
     if (this.world.score > this.save.hiScore) this.save.hiScore = this.world.score;
     tickBlink(this.frogBlink, dt);
+
+    if (this.world.level.world !== this.lastMusicWorld) {
+      // Forward-compat for M6: only world 1 is reachable today, but this is what crossfades music
+      // when the level's world changes (docs/specs/M5-audio.md acceptance #3).
+      this.lastMusicWorld = this.world.level.world;
+      music.play(this.world.level.world);
+    }
 
     particles.setPalette(getWorldTheme(this.world.level.world).palette);
     particles.update(dt);
@@ -172,6 +189,7 @@ export class PlayScene implements Scene {
       multiplierPulseT: this.multiplierPulseT,
     });
 
+    drawAudioHint(r, !audio.hasStarted());
     transitions.render(r);
   }
 }

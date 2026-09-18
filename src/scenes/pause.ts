@@ -1,4 +1,5 @@
 import type { Scene, SceneManager } from '../core/loop';
+import * as audio from '../core/audio';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../game/constants';
 import { getWorldTheme } from '../game/themes';
 import type { InputAction } from '../game/types';
@@ -79,6 +80,7 @@ export class PauseScene implements Scene {
 
   onAction(a: InputAction): void {
     if (a.type === 'pause' || a.type === 'confirm') {
+      audio.playSfx('uiConfirm');
       this.scenes.pop();
     }
   }

@@ -134,3 +134,17 @@ export function drawHud(r: Renderer, hud: HudState): void {
   roundRect(r, barX, barY, Math.max(barH, barW * pct), barH, barH / 2);
   r.ctx.restore();
 }
+
+/** A small "tap for sound" hint in the HUD's top-left corner, shown until the first user gesture
+ * creates the AudioContext (docs/specs/M5-audio.md section 1). Called by any scene that wants it
+ * (title, play) - not tied to `drawHud` itself since Title doesn't otherwise draw a HUD. */
+export function drawAudioHint(r: Renderer, visible: boolean): void {
+  if (!visible) return;
+  r.text('\u{1F507} Tap for sound', 12, 12, {
+    size: 12,
+    weight: 600,
+    align: 'left',
+    color: CREAM,
+    outline: INK,
+  });
+}

@@ -10,9 +10,14 @@ export interface LeaderboardEntry {
 }
 
 export interface SaveSettings {
+  /** 0 to 100 (docs/specs/M5-audio.md section 1). */
   master: number;
+  /** 0 to 100. */
   music: number;
+  /** 0 to 100. */
   sfx: number;
+  /** `M` toggles this at runtime (docs/specs/M5-audio.md); persisted like the volumes. */
+  muted: boolean;
   reduceMotion: boolean;
   keys: Record<string, string>;
 }
@@ -30,7 +35,7 @@ function defaultSave(): SaveData {
   return {
     hiScore: 0,
     leaderboard: [],
-    settings: { master: 1, music: 1, sfx: 1, reduceMotion: false, keys: {} },
+    settings: { master: 80, music: 70, sfx: 100, muted: false, reduceMotion: false, keys: {} },
     unlocks: [],
   };
 }
