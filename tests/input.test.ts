@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_KEY_BINDINGS, mapKeyToAction } from '../src/core/input';
+import {
+  DEFAULT_KEY_BINDINGS,
+  getKeyBindings,
+  getLastInputDevice,
+  isTopInputOwner,
+  isTouchCapable,
+  mapKeyToAction,
+  noteInputDevice,
+  popInputOwner,
+  pushInputOwner,
+  setKeyBindings,
+} from '../src/core/input';
 
 describe('mapKeyToAction: code -> key fallback', () => {
   it('maps a hop from key when code is empty (virtual keyboards/automation send no code)', () => {
@@ -109,5 +120,103 @@ describe('mapKeyToAction: custom key bindings (M8 remap)', () => {
       confirm: 'Enter',
       pause: 'Escape',
     });
+  });
+});
+
+// M10 quality pass: the small pure pieces of core/input.ts besides `mapKeyToAction` (last-input
+// device tracking, the key-remap store, and the input-owner stack - docs/specs/M8-report.md
+// "Deviations" #5) had no direct tests. `attachInput`/`onKeyDown`/`onTouchStart`/`pollGamepad`
+// stay untested here on purpose (ARCHITECTURE.md section 13: "No canvas or audio in tests" - these
+// need a real DOM/Gamepad to exercise meaningfully).
+describe('isTouchCapable', () => {
+  it('is false when navigator is unavailable (this Vitest environment)', () => {
+    expect(isTouchCapable()).toBe(false);
+  });
+
+  it('reflects navigator.maxTouchPoints when present, never throwing', () => {
+    const original = (globalThis as { navigator?: unknown }).navigator;
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { maxTouchPoints: 5 },
+      configurable: true,
+    });
+    expect(isTouchCapable()).toBe(true);
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { maxTouchPoints: 0 },
+      configurable: true,
+    });
+    expect(isTouchCapable()).toBe(false);
+    Object.defineProperty(globalThis, 'navigator', { value: original, configurable: true });
+  });
+});
+
+describe('getLastInputDevice / noteInputDevice', () => {
+  it('tracks whichever device last reported in', () => {
+    noteInputDevice('gamepad');
+    expect(getLastInputDevice()).toBe('gamepad');
+    noteInputDevice('touch');
+    expect(getLastInputDevice()).toBe('touch');
+    noteInputDevice('keyboard');
+    expect(getLastInputDevice()).toBe('keyboard');
+  });
+});
+
+describe('setKeyBindings / getKeyBindings', () => {
+  it('layers a partial custom binding on top of the defaults (never replaces the whole set)', () => {
+    setKeyBindings({ up: 'KeyJ' });
+    expect(getKeyBindings()).toEqual({
+      up: 'KeyJ',
+      down: 'ArrowDown',
+      left: 'ArrowLeft',
+      right: 'ArrowRight',
+      confirm: 'Enter',
+      pause: 'Escape',
+    });
+  });
+
+  it('an empty binding set reproduces the plain defaults', () => {
+    setKeyBindings({});
+    expect(getKeyBindings()).toEqual(DEFAULT_KEY_BINDINGS);
+  });
+});
+
+describe('input-owner stack (M8 "Deviations" #5: a covered menu must not react to raw pointer events)', () => {
+  it('only the top of the stack is ever the active owner', () => {
+    const a = {};
+    const b = {};
+    expect(isTopInputOwner(a)).toBe(false);
+
+    pushInputOwner(a);
+    expect(isTopInputOwner(a)).toBe(true);
+    expect(isTopInputOwner(b)).toBe(false);
+
+    pushInputOwner(b);
+    expect(isTopInputOwner(a)).toBe(false);
+    expect(isTopInputOwner(b)).toBe(true);
+
+    popInputOwner(b);
+    expect(isTopInputOwner(a)).toBe(true);
+
+    popInputOwner(a);
+    expect(isTopInputOwner(a)).toBe(false);
+  });
+
+  it('popping an owner that is not on the stack is a harmless no-op', () => {
+    const a = {};
+    const ghost = {};
+    pushInputOwner(a);
+    expect(() => popInputOwner(ghost)).not.toThrow();
+    expect(isTopInputOwner(a)).toBe(true);
+    popInputOwner(a);
+  });
+
+  it('pushing the same token twice keeps it on top until both are popped', () => {
+    const a = {};
+    pushInputOwner(a);
+    pushInputOwner(a);
+    expect(isTopInputOwner(a)).toBe(true);
+    popInputOwner(a);
+    expect(isTopInputOwner(a)).toBe(true); // one copy of `a` remains
+    popInputOwner(a);
+    expect(isTopInputOwner(a)).toBe(false);
   });
 });

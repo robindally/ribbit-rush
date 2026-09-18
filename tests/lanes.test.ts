@@ -4,6 +4,7 @@ import {
   isTrainWarningActive,
   laneMaxWidth,
   moverInstances,
+  moverRenderOffset,
   moverSpeed,
   moverX,
   secondsUntilLeadingEdgeEnters,
@@ -87,6 +88,78 @@ describe('stepLane / moverX', () => {
     expect(instances).toHaveLength(3);
     expect(instances[1]).toBeCloseTo(instances[0] + 15);
     expect(instances[2]).toBeCloseTo(instances[1] + 15);
+  });
+});
+
+// --- M10: render interpolation (ARCHITECTURE.md section 4: "each mover keeps prevX") ---
+
+describe('stepLane / moverRenderOffset', () => {
+  it('records prevOffset every step, one step behind the current offset', () => {
+    const lane: LaneDef = {
+      row: 9,
+      kind: 'road',
+      speed: 2,
+      period: 10,
+      movers: [{ type: 'car', width: 1, offset: 0 }],
+    };
+    stepLane(lane, 1); // offset 0 -> 2
+    expect(lane.movers[0]?.prevOffset).toBe(0);
+    expect(lane.movers[0]?.offset).toBe(2);
+    stepLane(lane, 1); // offset 2 -> 4
+    expect(lane.movers[0]?.prevOffset).toBe(2);
+  });
+
+  it('falls back to the current offset (no interpolation) before the first stepLane call', () => {
+    const lane: LaneDef = {
+      row: 9,
+      kind: 'road',
+      speed: 2,
+      period: 10,
+      movers: [{ type: 'car', width: 1, offset: 5 }],
+    };
+    expect(moverRenderOffset(lane, lane.movers[0] as never, 0.5)).toBe(5);
+  });
+
+  it('interpolates linearly between prevOffset and offset by alpha, mid-lane (no wrap)', () => {
+    const lane: LaneDef = {
+      row: 9,
+      kind: 'road',
+      speed: 4,
+      period: 20,
+      movers: [{ type: 'car', width: 1, offset: 0 }],
+    };
+    stepLane(lane, 1); // 0 -> 4
+    expect(moverRenderOffset(lane, lane.movers[0] as never, 0)).toBeCloseTo(0);
+    expect(moverRenderOffset(lane, lane.movers[0] as never, 1)).toBeCloseTo(4);
+    expect(moverRenderOffset(lane, lane.movers[0] as never, 0.5)).toBeCloseTo(2);
+  });
+
+  it('takes the short way around a period wrap instead of jumping backward across the lane', () => {
+    const lane: LaneDef = {
+      row: 9,
+      kind: 'road',
+      speed: 1,
+      period: 10,
+      movers: [{ type: 'car', width: 1, offset: 9.5 }],
+    };
+    stepLane(lane, 1); // 9.5 + 1 = 10.5, wraps to 0.5
+    expect(lane.movers[0]?.prevOffset).toBe(9.5);
+    expect(lane.movers[0]?.offset).toBeCloseTo(0.5);
+    // Halfway through the step, the mover should be exactly at the wrap boundary (0), not at the
+    // midpoint of the *raw* numbers (9.5 and 0.5 average to 5 - the wrong, "teleport back" answer).
+    expect(moverRenderOffset(lane, lane.movers[0] as never, 0.5)).toBeCloseTo(0, 5);
+  });
+
+  it('wraps the same short way for a leftward (negative-speed) lane', () => {
+    const lane: LaneDef = {
+      row: 9,
+      kind: 'road',
+      speed: -1,
+      period: 10,
+      movers: [{ type: 'car', width: 1, offset: 0.3 }],
+    };
+    stepLane(lane, 1); // 0.3 - 1 = -0.7, wraps to 9.3
+    expect(moverRenderOffset(lane, lane.movers[0] as never, 0.5)).toBeCloseTo(9.8, 5);
   });
 });
 

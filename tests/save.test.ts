@@ -1,12 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   insertEndlessLeaderboardEntry,
   insertLeaderboardEntry,
   isEndlessUnlocked,
   LEADERBOARD_MAX,
+  loadSave,
   qualifiesForEndlessLeaderboard,
   qualifiesForLeaderboard,
   recordBestLevel,
+  writeSave,
   type EndlessLeaderboardEntry,
   type LeaderboardEntry,
   type SaveData,
@@ -163,5 +165,123 @@ describe('qualifiesForEndlessLeaderboard', () => {
     expect(qualifiesForEndlessLeaderboard(board, 1, 101)).toBe(true); // same crossings, better score
     expect(qualifiesForEndlessLeaderboard(board, 2, 1)).toBe(true); // more crossings beats any score
     expect(qualifiesForEndlessLeaderboard(board, 0, 999_999)).toBe(false); // fewer crossings loses
+  });
+});
+
+// M10 quality pass: `loadSave`/`writeSave` themselves (the versioned-blob read/write, upgrade
+// guards, and corrupt-data fallback docs/ARCHITECTURE.md section 12 describes) had no direct
+// tests - only the pure helpers above did. `localStorage` isn't part of Vitest's default `node`
+// environment, so this installs a tiny in-memory stand-in (plain object key/value store, not a
+// DOM/canvas dependency) for the duration of this block only, matching the same "guarded, so a
+// disabled/unavailable localStorage never throws" contract the module's own header comment
+// documents - see below for the case where it's absent entirely.
+describe('loadSave / writeSave', () => {
+  let store: Map<string, string>;
+  const KEY = 'ribbit-rush.v1';
+
+  beforeEach(() => {
+    store = new Map();
+    const fakeStorage: Storage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        store.set(k, v);
+      },
+      removeItem: (k: string) => {
+        store.delete(k);
+      },
+      clear: () => store.clear(),
+      key: (i: number) => Array.from(store.keys())[i] ?? null,
+      get length() {
+        return store.size;
+      },
+    };
+    Object.defineProperty(globalThis, 'localStorage', { value: fakeStorage, configurable: true });
+  });
+
+  afterEach(() => {
+    Reflect.deleteProperty(globalThis, 'localStorage');
+  });
+
+  it('returns sensible defaults when nothing has been saved yet', () => {
+    const save = loadSave();
+    expect(save.hiScore).toBe(0);
+    expect(save.bestLevel).toBe(1);
+    expect(save.leaderboard).toEqual([]);
+    expect(save.endlessLeaderboard).toEqual([]);
+    expect(save.selectedSkin).toBe('classic');
+    expect(save.lifetimeHomesFilled).toBe(0);
+    expect(save.bestNearMissesInRun).toBe(0);
+    expect(save.settings.master).toBe(80);
+  });
+
+  it('round-trips a full save through writeSave -> loadSave', () => {
+    const save = loadSave();
+    save.hiScore = 4200;
+    save.bestLevel = 9;
+    save.selectedSkin = 'ninja';
+    save.leaderboard = [{ name: 'AAA', score: 4200, world: 2, level: 5, date: '2026-09-18' }];
+    writeSave(save);
+
+    const reloaded = loadSave();
+    expect(reloaded.hiScore).toBe(4200);
+    expect(reloaded.bestLevel).toBe(9);
+    expect(reloaded.selectedSkin).toBe('ninja');
+    expect(reloaded.leaderboard).toEqual(save.leaderboard);
+  });
+
+  it('falls back to defaults on a corrupt (non-JSON) blob rather than throwing', () => {
+    store.set(KEY, '{not valid json');
+    expect(() => loadSave()).not.toThrow();
+    expect(loadSave().hiScore).toBe(0);
+  });
+
+  it('upgrades an old save blob missing every M9 field, defaulting each one', () => {
+    // Simulates a pre-M9 save (docs/specs/M9-report.md: "an M8 session's localStorage upgrades
+    // cleanly") - only the fields that existed before M9 are present.
+    store.set(
+      KEY,
+      JSON.stringify({
+        hiScore: 1500,
+        bestLevel: 4,
+        leaderboard: [{ name: 'BBB', score: 1500, world: 1, level: 3, date: '2026-01-01' }],
+        settings: { master: 60, music: 50, sfx: 90, muted: true, reduceMotion: true, keys: {} },
+        unlocks: [],
+        lastName: 'BBB',
+      }),
+    );
+    const save = loadSave();
+    // Carried over correctly from the old blob:
+    expect(save.hiScore).toBe(1500);
+    expect(save.bestLevel).toBe(4);
+    expect(save.settings.muted).toBe(true);
+    expect(save.settings.reduceMotion).toBe(true);
+    // Newly defaulted (absent from the old blob):
+    expect(save.endlessLeaderboard).toEqual([]);
+    expect(save.selectedSkin).toBe('classic');
+    expect(save.lifetimeHomesFilled).toBe(0);
+    expect(save.bestNearMissesInRun).toBe(0);
+    expect(typeof save.settings.onScreenDpad).toBe('boolean');
+  });
+
+  it('never throws when localStorage itself is unavailable (private browsing, SSR-ish runs)', () => {
+    Reflect.deleteProperty(globalThis, 'localStorage');
+    expect(() => loadSave()).not.toThrow();
+    expect(loadSave().hiScore).toBe(0);
+    expect(() => writeSave(loadSave())).not.toThrow();
+  });
+
+  it('writeSave swallows a quota-exceeded (or any setItem) error rather than throwing', () => {
+    const throwingStorage: Storage = {
+      getItem: () => null,
+      setItem: () => {
+        throw new DOMException('quota exceeded', 'QuotaExceededError');
+      },
+      removeItem: () => {},
+      clear: () => {},
+      key: () => null,
+      length: 0,
+    };
+    Object.defineProperty(globalThis, 'localStorage', { value: throwingStorage, configurable: true });
+    expect(() => writeSave(loadSave())).not.toThrow();
   });
 });

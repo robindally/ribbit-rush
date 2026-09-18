@@ -4,7 +4,7 @@
 // docs/specs/M3-art-pass.md section 3.
 
 import { CANVAS_WIDTH, COLS, RIVER_ROWS, TILE } from '../../game/constants';
-import { moverInstances } from '../../game/lanes';
+import { moverInstances, moverRenderOffset } from '../../game/lanes';
 import type { WorldTheme } from '../../game/themes';
 import type { LaneDef } from '../../game/types';
 import { turtleVisual } from '../anim';
@@ -75,6 +75,11 @@ export function drawPlatformContactShadows(
   lane: LaneDef,
   theme: WorldTheme,
   elapsed: number,
+  // M10: the loop's render alpha - keeps the contact shadow glued under its platform's own
+  // interpolated position (see `render/draw/entities.ts`'s `drawLaneMovers`) rather than lagging a
+  // fixed step behind it at high refresh rates. Defaults to 1 (no interpolation) for parity with
+  // `drawLaneMovers`'s own default.
+  alpha = 1,
 ): void {
   const y = lane.row * TILE;
   const ctx = r.ctx;
@@ -82,7 +87,8 @@ export function drawPlatformContactShadows(
   ctx.globalAlpha = 0.5;
   for (const mover of lane.movers) {
     if (mover.dive && !turtleVisual(mover.dive, elapsed).visible) continue;
-    for (const x of moverInstances(lane, mover)) {
+    const renderOffset = moverRenderOffset(lane, mover, alpha);
+    for (const x of moverInstances(lane, mover, renderOffset)) {
       const px = x * TILE;
       const w = mover.width * TILE;
       if (px + w < 0 || px > COLS * TILE) continue;

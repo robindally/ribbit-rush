@@ -25,6 +25,7 @@ import {
   START_LIVES,
 } from './constants';
 import { killerHitType, platformAt, vehicleHits } from './collision';
+import { isTrainWarningActive, moverX, stepFloeState, stepLane, turtleDiveState, type DiveState } from './lanes';
 import {
   endlessDifficultyForCrossing,
   endlessWorldForCrossing,
@@ -40,7 +41,6 @@ import {
 } from './frog';
 import type { HopBuffer } from './frog';
 import { getLevel } from './level';
-import { isTrainWarningActive, stepFloeState, stepLane } from './lanes';
 import {
   chooseLadyFrogSpawn,
   choosePowerupSpawn,
@@ -181,6 +181,13 @@ export class World {
    * once per approach rather than every tick - reset the instant the warning window closes so the
    * next lap can warn again (M6: docs/LEVELS.md "new mover and lane rules"). */
   private trainWarned = new Set<number>();
+  /** M10: each turtle mover's `DiveState` as of the *previous* tick, keyed by `${lane.row}:${mover
+   * index}` - compared every tick against its current state (`updateTurtleDives`) to detect the
+   * sinking->down and down->rising transitions that fire `turtleDive` (ART_BIBLE.md section 5:
+   * "leaving a ripple ring... reverse on rise" - closes the M4/M9 "Known gaps" note on this).
+   * Cleared on every level/crossing load so a brand-new lane layout never compares against a stale
+   * key from the level just left. */
+  private turtleDiveStates = new Map<string, DiveState>();
 
   constructor(
     level: LevelDef,
@@ -218,6 +225,17 @@ export class World {
   update(dt: number): void {
     if (this.gameOver) return;
 
+    // M10: snapshot the frog's render-interpolation baseline *before* anything below mutates it
+    // this tick - same ordering as `fx/particles.ts`'s own `px = x` and `game/lanes.ts`'s
+    // `stepLane`'s new `prevOffset = offset`. `prevState` lets the renderer detect a same-tick
+    // state change (e.g. a buffered hop landing and immediately chaining into the next one) and
+    // fall back to the un-interpolated value for exactly that one frame rather than lerping across
+    // a discontinuity - see `render/draw/entities.ts`'s `drawFrog`.
+    this.frog.prevX = this.frog.x;
+    this.frog.prevHopT = this.frog.hopT;
+    this.frog.prevStateT = this.frog.stateT;
+    this.frog.prevState = this.frog.state;
+
     if (this.frog.state === 'dying') {
       this.frog.stateT += dt;
       if (this.frog.stateT >= DEATH_S) this.afterDeath();
@@ -227,6 +245,7 @@ export class World {
     this.elapsed += dt;
     const laneTimeScale = this.advanceFreeze(dt);
     for (const lane of this.lanes) stepLane(lane, dt * laneTimeScale);
+    this.updateTurtleDives();
     this.updatePowerupField(dt);
     this.updateLadyFrogField();
     this.updateHomeHazards(dt);
@@ -666,6 +685,33 @@ export class World {
     }
   }
 
+  /** M10: fires `turtleDive` when any turtle mover's dive cycle crosses sinking->down (fully
+   * submerged - `phase: 'sink'`) or down->rising (about to resurface - `phase: 'rise'`), by diffing
+   * `game/lanes.ts`'s own pure `turtleDiveState` against what it was last tick. Uses `this.elapsed`
+   * unscaled by Freeze Frame's lane-speed slowdown, matching `render/draw/entities.ts`'s
+   * `drawTurtleGroup` (`turtleVisual(mover.dive, elapsed)`) - the event fires exactly when the
+   * render actually shows the transition, freeze or not. */
+  private updateTurtleDives(): void {
+    for (const lane of this.lanes) {
+      if (lane.kind !== 'river') continue;
+      lane.movers.forEach((mover, i) => {
+        if (!mover.dive) return;
+        const key = `${lane.row}:${i}`;
+        const state = turtleDiveState(mover.dive, this.elapsed);
+        const prev = this.turtleDiveStates.get(key);
+        this.turtleDiveStates.set(key, state);
+        if (prev === undefined || prev === state) return;
+        if (prev === 'sinking' && state === 'down') {
+          const x = moverX(lane, mover) + mover.width / 2;
+          gameEvents.emit({ type: 'turtleDive', phase: 'sink', x, row: lane.row });
+        } else if (prev === 'down' && state === 'rising') {
+          const x = moverX(lane, mover) + mover.width / 2;
+          gameEvents.emit({ type: 'turtleDive', phase: 'rise', x, row: lane.row });
+        }
+      });
+    }
+  }
+
   private checkOffscreen(): void {
     const centre = this.frog.x + 0.5;
     if (centre < 0 || centre > COLS) this.die('offscreen');
@@ -863,6 +909,7 @@ export class World {
     this.lanes = this.level.lanes;
     this.homes = HOME_COLS.map(() => null);
     this.trainWarned.clear();
+    this.turtleDiveStates.clear();
     this.respawnFrogOnly();
   }
 
@@ -872,6 +919,7 @@ export class World {
     this.lanes = this.level.lanes;
     this.homes = HOME_COLS.map(() => null);
     this.trainWarned.clear();
+    this.turtleDiveStates.clear();
     this.respawnFrogOnly();
   }
 

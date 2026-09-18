@@ -154,6 +154,8 @@ export function mapKeyToAction(e: KeyLike, custom?: Partial<KeyBindings>): Input
   return null;
 }
 
+/* v8 ignore start -- DOM event wiring; ARCHITECTURE.md section 13: "No canvas or audio in tests" -
+ * the pure mapping this calls (`mapKeyToAction`) is exhaustively tested in tests/input.test.ts. */
 function onKeyDown(e: KeyboardEvent): void {
   if (e.repeat) return; // no OS auto-repeat hops
 
@@ -164,6 +166,7 @@ function onKeyDown(e: KeyboardEvent): void {
     emit(action);
   }
 }
+/* v8 ignore stop */
 
 interface TouchStart {
   x: number;
@@ -183,6 +186,7 @@ let attachedTarget: HTMLElement | null = null;
  * the same conversion `scenes/title.ts`/`scenes/gameOver.ts` already did ad hoc for their own
  * raw-touch hit tests - centralised here now that more than one caller needs it. Returns null
  * before the canvas has a layout (zero-size rect). */
+/* v8 ignore start -- needs a real element layout (getBoundingClientRect); DOM-only. */
 function logicalFromClient(clientX: number, clientY: number): { x: number; y: number } | null {
   if (!attachedTarget) return null;
   const rect = attachedTarget.getBoundingClientRect();
@@ -192,6 +196,7 @@ function logicalFromClient(clientX: number, clientY: number): { x: number; y: nu
     y: ((clientY - rect.top) / rect.height) * CANVAS_HEIGHT,
   };
 }
+/* v8 ignore stop */
 
 // --- Touch exclusion stack (M8: on-canvas UI kit buttons/sliders and the on-screen d-pad) ---
 //
@@ -249,6 +254,8 @@ export function isTopInputOwner(token: unknown): boolean {
   return inputOwnerStack.length > 0 && inputOwnerStack[inputOwnerStack.length - 1] === token;
 }
 
+/* v8 ignore start -- real TouchEvent/DOM wiring; the swipe/tap recognition math itself (threshold,
+ * direction) is simple enough to read directly and isn't split out into a pure helper today. */
 function onTouchStart(e: TouchEvent): void {
   const t = e.changedTouches[0];
   if (!t) return;
@@ -286,13 +293,16 @@ function onTouchEnd(e: TouchEvent): void {
     emit({ type: 'hop', dir: 'up' });
   }
 }
+/* v8 ignore stop */
 
+/* v8 ignore start -- attaches real DOM listeners; nothing pure left to unit-test here. */
 export function attachInput(target: HTMLElement = window.document.body): void {
   attachedTarget = target;
   window.addEventListener('keydown', onKeyDown);
   target.addEventListener('touchstart', onTouchStart, { passive: true });
   target.addEventListener('touchend', onTouchEnd, { passive: true });
 }
+/* v8 ignore stop */
 
 // --- Gamepad (polled once per animation frame from the loop) ---
 //
@@ -373,6 +383,10 @@ export function diffGamepadFrames(prev: GamepadFrame | null, current: GamepadFra
 
 const padFrames = new Map<number, GamepadFrame>();
 
+/* v8 ignore start -- reads real `navigator.getGamepads()`; the pipeline it feeds
+ * (`readGamepadFrame`/`diffGamepadFrames`) is exhaustively unit-tested in tests/gamepad.test.ts
+ * per docs/specs/M8-report.md's own "Gamepad verification" fallback (no physical/virtual pad is
+ * available in this environment either). */
 export function pollGamepad(): void {
   const pads = typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : [];
   for (const pad of pads) {
@@ -387,3 +401,4 @@ export function pollGamepad(): void {
     padFrames.set(pad.index, current);
   }
 }
+/* v8 ignore stop */

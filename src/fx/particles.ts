@@ -365,6 +365,14 @@ gameEvents.on('bonk', (e) => {
   bonk(p.x, p.y);
 });
 
+// M10: turtle sink/rise ripple rings (ART_BIBLE.md section 5: "leaving a ripple ring... reverse on
+// rise") - reuses the exact same `ripple` emitter the frog's own platform-landing ripple already
+// uses, just triggered by the turtle's own dive-state transition instead of a frog landing.
+gameEvents.on('turtleDive', (e) => {
+  const p = tileToPx(e.x, e.row);
+  ripple(p.x, p.y, currentPalette?.waterLight ?? EYE_WHITE);
+});
+
 // M7: Bubble Shield "pops with a burst" (docs/specs/M7-powerups-scoring.md section 1) - a double
 // ring in the shield's own blue (ART_BIBLE.md section 3: "Bubble Shield #3E9CE6 bubble").
 const SHIELD_BLUE = '#3E9CE6';

@@ -58,6 +58,13 @@ export interface MoverDef {
   speed?: number;
   /** Floes only; mutable runtime state, see `FloeState` above. */
   floe?: FloeState;
+  /** M10: the previous fixed-step's `offset`, for render interpolation (ARCHITECTURE.md section 4:
+   * "each mover keeps prevX") - set by `game/lanes.ts`'s `stepLane` every fixed step, mirroring
+   * `fx/particles.ts`'s own px/py pattern. Undefined until the first `stepLane` call after a mover
+   * is created (a freshly spawned level/crossing has nothing to interpolate *from* yet), in which
+   * case renderers fall back to the current `offset` (no interpolation, exactly today's pre-M10
+   * behaviour). */
+  prevOffset?: number;
 }
 
 export type LaneKind = 'road' | 'river' | 'rail' | 'median' | 'bank' | 'home';
@@ -101,6 +108,20 @@ export interface Frog {
   deathCause?: DeathCause;
   stateT: number; // seconds in current state
   maxRow: number; // furthest row reached this attempt (lowest number)
+  // --- M10: render interpolation (ARCHITECTURE.md section 4) - the previous fixed-step's x/hopT/
+  // stateT/state, captured once at the top of every `World.update()` tick (before that tick's own
+  // mutations), the same "keep a prev, render with alpha" technique `game/lanes.ts`'s movers and
+  // `fx/particles.ts`'s particles already use. `render/draw/entities.ts` lerps between prev and
+  // current using the loop's alpha so 120/144Hz displays render smooth in-between frames instead of
+  // holding the latest 60Hz fixed-step value for 2-3 renders in a row. `x` is safe to interpolate
+  // unconditionally (it only ever changes continuously - a hop's lerp, or drifting with a platform);
+  // `hopT`/`stateT` are guarded by the renderer against interpolating *across* a discontinuity (a
+  // buffered hop chaining into a new one inside the same fixed step, or a state change), using
+  // `prevState` to detect it - see `drawFrog`'s own doc comment.
+  prevX: number;
+  prevHopT: number;
+  prevStateT: number;
+  prevState: FrogState;
 }
 
 // --- Homes ---
@@ -136,7 +157,13 @@ export type GameEvent =
   | { type: 'oilSlide'; x: number; row: number; fromX: number; fromRow: number }
   /** M6: fires once, 1.5s before a rail lane's train leading edge enters the screen
    * (docs/LEVELS.md "new mover and lane rules"). */
-  | { type: 'trainWarning'; row: number };
+  | { type: 'trainWarning'; row: number }
+  /** M10: a turtle finished sinking (fully submerged, `phase: 'sink'`) or started rising back to
+   * the surface (`phase: 'rise'`) - ART_BIBLE.md section 5, "leaving a ripple ring... reverse on
+   * rise." `x`/`row` are the turtle group's own centre tile. Detected by `game/world.ts` comparing
+   * each turtle mover's `game/lanes.ts` `turtleDiveState` tick over tick (closes the M4/M9 "Known
+   * gaps" note on this - see docs/specs/M4-report.md/M9-report.md). */
+  | { type: 'turtleDive'; phase: 'sink' | 'rise'; x: number; row: number };
 
 // --- Levels (section 10) ---
 

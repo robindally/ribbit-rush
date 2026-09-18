@@ -3,7 +3,7 @@
 // docs/specs/M3-art-pass.md sections 1 and 4-5, and docs/specs/M6-worlds.md sections 2 and 5.
 
 import { COLS, MEGA_HOP_ARC_TILES, TILE } from '../../game/constants';
-import { isTrainWarningActive, moverInstances, moverSpeed } from '../../game/lanes';
+import { isTrainWarningActive, moverInstances, moverRenderOffset, moverSpeed } from '../../game/lanes';
 import type { Weather } from '../../game/themes';
 import type { Dir, Frog, LaneDef, MoverDef } from '../../game/types';
 import {
@@ -15,6 +15,7 @@ import {
   frogLandingSquash,
   frogShadowScale,
   isLandingSquashActive,
+  lerp,
   motorbikeLeanRad,
   turtleVisual,
   type ScaleXY,
@@ -153,9 +154,15 @@ export function drawLaneMovers(
   elapsed: number,
   weather?: Weather,
   fogFrogCol?: number,
+  // M10: the loop's render alpha (ARCHITECTURE.md section 4) - defaults to 1 (i.e. "no
+  // interpolation, draw at the current fixed-step offset") so every pre-M10 call site that hasn't
+  // been threaded through the scene's own `render(r, alpha)` yet (decorative lanes, tests) keeps
+  // its exact previous behaviour.
+  alpha = 1,
 ): void {
   for (const mover of lane.movers) {
-    for (const x of moverInstances(lane, mover)) {
+    const renderOffset = moverRenderOffset(lane, mover, alpha);
+    for (const x of moverInstances(lane, mover, renderOffset)) {
       const px = x * TILE;
       const w = mover.width * TILE;
       if (px + w < 0 || px > COLS * TILE) continue; // off-screen, skip
@@ -219,8 +226,8 @@ function drawBlinkOverlay(r: Renderer, cx: number, y: number, rot: number, scale
   ctx.restore();
 }
 
-function drawFrogDeath(r: Renderer, frog: Frog, cx: number, groundY: number): void {
-  const v = frogDeathVisual(frog.deathCause, frog.stateT);
+function drawFrogDeath(r: Renderer, frog: Frog, cx: number, groundY: number, renderStateT: number): void {
+  const v = frogDeathVisual(frog.deathCause, renderStateT);
   const y = groundY + v.sinkY * TILE;
   const rot = DIR_ROT[frog.facing];
 
@@ -257,13 +264,34 @@ function drawFrogDeath(r: Renderer, frog: Frog, cx: number, groundY: number): vo
  * type, so none of this needs new gameplay-side state. `elapsed` is the world's simulation clock
  * (drives idle breathing, which has no gameplay effect). `blinking` comes from the caller's own
  * `BlinkState` (ticked once per fixed update step - see render/anim.ts), since the randomised,
- * re-rolled blink timer needs state that outlives a single render call. */
-export function drawFrog(r: Renderer, frog: Frog, elapsed: number, blinking: boolean): void {
-  const cx = (frog.x + 0.5) * TILE;
+ * re-rolled blink timer needs state that outlives a single render call.
+ *
+ * M10: `alpha` is the loop's render-interpolation fraction (ARCHITECTURE.md section 4). `frog.x`
+ * lerps against `frog.prevX` unconditionally - it only ever changes continuously (a hop's own
+ * tween, or drifting with a platform), so there's no discontinuity to guard against. `hopT`/
+ * `stateT` need a guard: a buffered hop can land and immediately chain into the next one inside the
+ * same fixed step (`World.onLanded` -> `tryHop`), which resets `hopT` to 0 and `stateT` to 0 mid-
+ * tick - interpolating *across* that would lerp the arc/squash backwards for one frame instead of
+ * showing the chain. `frog.prevState`/`prevHopT` (captured once per tick, before that tick's own
+ * mutations - see `game/world.ts`'s `update()`) are enough to detect it: only lerp `hopT` while the
+ * state was already 'hopping' *and* it only grew (a real chain always resets it lower), and only
+ * lerp `stateT` while the state didn't change at all this tick. Falling back to the raw, current
+ * value on the (rare, single-frame) guard miss is exactly today's pre-M10 behaviour - never worse,
+ * just not smoothed for that one frame. */
+export function drawFrog(r: Renderer, frog: Frog, elapsed: number, blinking: boolean, alpha = 1): void {
+  const renderX = lerp(frog.prevX, frog.x, alpha);
+  const hopT =
+    frog.state === 'hopping' && frog.prevState === 'hopping' && frog.prevHopT <= frog.hopT
+      ? lerp(frog.prevHopT, frog.hopT, alpha)
+      : frog.hopT;
+  const stateT =
+    frog.prevState === frog.state ? lerp(frog.prevStateT, frog.stateT, alpha) : frog.stateT;
+
+  const cx = (renderX + 0.5) * TILE;
   const groundY = frog.row * TILE + TILE / 2;
 
   if (frog.state === 'dying' || frog.state === 'dead') {
-    drawFrogDeath(r, frog, cx, groundY);
+    drawFrogDeath(r, frog, cx, groundY, stateT);
     return;
   }
 
@@ -273,24 +301,24 @@ export function drawFrog(r: Renderer, frog: Frog, elapsed: number, blinking: boo
   // extra World/Frog state needed: `computeMegaHopTarget` is the only thing that ever produces a
   // 2-row jump.
   const isMegaHop = hopping && Math.abs(frog.toRow - frog.fromRow) === 2;
-  const arcTiles = hopping ? frogHopArc(frog.hopT, isMegaHop ? MEGA_HOP_ARC_TILES : undefined) : 0;
+  const arcTiles = hopping ? frogHopArc(hopT, isMegaHop ? MEGA_HOP_ARC_TILES : undefined) : 0;
   const y = groundY - arcTiles * TILE;
-  const shadowScale = hopping ? frogShadowScale(frog.hopT) : 1;
+  const shadowScale = hopping ? frogShadowScale(hopT) : 1;
 
   r.shadow(cx, groundY + TILE * 0.22, TILE * 0.56, TILE * 0.26, shadowScale);
 
   let scale: ScaleXY;
   if (hopping) {
-    scale = frogHopScale(frog.hopT);
-  } else if (isLandingSquashActive(frog.stateT)) {
-    scale = frogLandingSquash(frog.stateT);
+    scale = frogHopScale(hopT);
+  } else if (isLandingSquashActive(stateT)) {
+    scale = frogLandingSquash(stateT);
   } else {
     const breath = frogIdleBreath(elapsed);
     scale = { scaleX: breath, scaleY: breath };
   }
 
   const rot = DIR_ROT[frog.facing];
-  const useJumpFrame = hopping && frog.hopT >= 0.15 && frog.hopT <= 0.85;
+  const useJumpFrame = hopping && hopT >= 0.15 && hopT <= 0.85;
   r.sprite(useJumpFrame ? 'frog-jump' : 'frog-idle', cx, y, {
     rot,
     sx: scale.scaleX,

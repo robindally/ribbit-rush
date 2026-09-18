@@ -23,6 +23,13 @@ export function createFrog(): Frog {
     state: 'idle',
     stateT: 0,
     maxRow: START_ROW,
+    // M10: no previous fixed step yet - equal to the current values, so the very first render
+    // (alpha in [0,1] before any `World.update()` tick has run) interpolates to itself, i.e. no
+    // visible jump.
+    prevX: 6,
+    prevHopT: 1,
+    prevStateT: 0,
+    prevState: 'idle',
   };
 }
 

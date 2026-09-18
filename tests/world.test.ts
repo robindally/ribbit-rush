@@ -679,3 +679,94 @@ describe('Endless mode', () => {
     expect(clearedFired).toBe(false);
   });
 });
+
+// --- M10: turtle sink/rise ripple event (ART_BIBLE.md section 5, closing the M4/M9 "Known gaps"
+// note on this) ---
+
+describe('M10 turtleDive event', () => {
+  it('fires "sink" once fully submerged, then "rise" once it starts resurfacing', () => {
+    const riverLane: LaneDef = {
+      row: 5,
+      kind: 'river',
+      speed: 0,
+      period: 20,
+      movers: [{ type: 'turtle', width: 1, offset: 5, dive: { up: 0.1, down: 0.05, phase: 0 } }],
+    };
+    const world = new World(levelWithLanes([riverLane]), 1, 1);
+
+    const fired: { phase: string; row: number }[] = [];
+    const onDive = (e: { phase: 'sink' | 'rise'; row: number }): void => {
+      fired.push({ phase: e.phase, row: e.row });
+    };
+    gameEvents.on('turtleDive', onDive);
+
+    const dt = 1 / 60;
+    // Cycle length 0.1 + 0.5 + 0.05 + 0.5 = 1.15s; run past two full cycles.
+    for (let i = 0; i < Math.round(2.4 * 60); i++) world.update(dt);
+    gameEvents.off('turtleDive', onDive);
+
+    expect(fired.filter((f) => f.phase === 'sink').length).toBeGreaterThanOrEqual(2);
+    expect(fired.filter((f) => f.phase === 'rise').length).toBeGreaterThanOrEqual(2);
+    expect(fired[0]).toEqual({ phase: 'sink', row: 5 }); // sink always precedes rise in the cycle
+    expect(fired.every((f) => f.row === 5)).toBe(true);
+  });
+
+  it('never fires on the very first tick (no prior state recorded yet to compare against)', () => {
+    const riverLane: LaneDef = {
+      row: 5,
+      kind: 'river',
+      speed: 0,
+      period: 20,
+      movers: [{ type: 'turtle', width: 1, offset: 5, dive: { up: 0, down: 0, phase: 0 } }],
+    };
+    const world = new World(levelWithLanes([riverLane]), 1, 1);
+    const fired: unknown[] = [];
+    const onDive = (e: unknown): void => {
+      fired.push(e);
+    };
+    gameEvents.on('turtleDive', onDive);
+    world.update(1 / 60);
+    gameEvents.off('turtleDive', onDive);
+    expect(fired).toEqual([]);
+  });
+
+  it('ignores movers with no dive cycle (logs, floes) - never throws, never fires', () => {
+    const riverLane: LaneDef = {
+      row: 5,
+      kind: 'river',
+      speed: 1,
+      period: 20,
+      movers: [{ type: 'log', width: 4, offset: 0 }],
+    };
+    const world = new World(levelWithLanes([riverLane]), 1, 1);
+    expect(() => {
+      for (let i = 0; i < 60; i++) world.update(1 / 60);
+    }).not.toThrow();
+  });
+});
+
+// --- M10: frog render-interpolation snapshot fields (ARCHITECTURE.md section 4) ---
+
+describe('M10 frog prevX/prevHopT/prevStateT/prevState', () => {
+  it('captures the pre-tick snapshot once per update(), before that tick advances hopT/x', () => {
+    const world = new World(levelWithLanes([]), 1, 1);
+    placeFrogIdleAt(world.frog, 6, START_ROW);
+
+    world.queueHop('up'); // starts synchronously: hopT -> 0, state -> 'hopping'
+    expect(world.frog.hopT).toBe(0);
+
+    world.update(1 / 60); // one physics step into the hop
+    expect(world.frog.prevHopT).toBe(0); // snapshot taken before this tick's own advance
+    expect(world.frog.hopT).toBeGreaterThan(0);
+    expect(world.frog.prevState).toBe('hopping');
+    expect(world.frog.state).toBe('hopping');
+  });
+
+  it('prevX matches x while the frog is settled and idle (nothing moving to interpolate)', () => {
+    const world = new World(levelWithLanes([]), 1, 1);
+    placeFrogIdleAt(world.frog, 6, START_ROW);
+    world.update(1 / 60);
+    expect(world.frog.prevX).toBe(world.frog.x);
+    expect(world.frog.prevState).toBe('idle');
+  });
+});

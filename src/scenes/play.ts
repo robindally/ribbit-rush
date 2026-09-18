@@ -585,12 +585,12 @@ export class PlayScene implements Scene {
       const lane = world.laneAt(row);
       if (!lane) continue;
       drawWaterAnimated(r, lane, theme, world.elapsed);
-      drawPlatformContactShadows(r, lane, theme, world.elapsed);
-      drawLaneMovers(r, lane, world.elapsed, theme.weather, fogFrogCol);
+      drawPlatformContactShadows(r, lane, theme, world.elapsed, alpha);
+      drawLaneMovers(r, lane, world.elapsed, theme.weather, fogFrogCol, alpha);
     }
     for (const row of ROAD_ROWS) {
       const lane = world.laneAt(row);
-      if (lane) drawLaneMovers(r, lane, world.elapsed, theme.weather, fogFrogCol);
+      if (lane) drawLaneMovers(r, lane, world.elapsed, theme.weather, fogFrogCol, alpha);
     }
     drawRailSignals(r, world.lanes, world.elapsed);
 
@@ -599,7 +599,7 @@ export class PlayScene implements Scene {
     if (world.powerup) drawPowerupBadge(r, world.powerup, world.elapsed);
     if (world.ladyFrog) drawLadyFrogOnField(r, world.ladyFrog, world.elapsed);
 
-    drawFrog(r, world.frog, world.elapsed, this.frogBlink.blinking);
+    drawFrog(r, world.frog, world.elapsed, this.frogBlink.blinking, alpha);
 
     if (world.carryingLadyFrog) drawLadyFrogOnBack(r, world.frog, world.elapsed);
     if (world.shieldActive) drawShieldBubble(r, world.frog, world.elapsed);

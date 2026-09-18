@@ -29,7 +29,7 @@ import {
   spriteAt,
   type SpriteImage,
 } from '../render/sprites';
-import { applySkin } from '../render/skinSprites';
+import { applySkin, currentHatSprite } from '../render/skinSprites';
 import {
   actionHint,
   drawButton,
@@ -77,6 +77,14 @@ const HERO_FEET_OFFSET_PX = HERO_SCALE * TILE * ((47 - 24) / 48) * 1.02;
 const SKIN_SWATCH_D = 30;
 const SKIN_SWATCH_GAP = 8;
 const SKIN_PREVIEW_SCALE = SKIN_SWATCH_D / TILE;
+
+// M10: hat overlay sprites (`game/skins.ts`'s `HatKind`), pre-warmed at both above-1x scales this
+// scene draws a frog at - closes the M9 "Known gaps" note that hats only rendered in gameplay
+// (`render/draw/entities.ts`'s `drawFrog`), not the Title's hero or the skin-picker's own preview
+// swatches. Hat art itself is never recoloured per skin (only the frog body/dark/light are), so
+// this reuses `render/sprites.ts`'s generic `spriteAt`/`preloadSpriteAt` cache directly rather than
+// going through the skin-recolour pipeline `skinPreviews` below uses for the frog itself.
+const HAT_SPRITE_NAMES = ['hat-headband', 'hat-crown', 'hat-beanie'];
 
 interface LogoLayout {
   canvas: HTMLCanvasElement;
@@ -289,6 +297,10 @@ export class TitleScene implements Scene {
     // rather than skipping a frame - see render/sprites.ts.
     void preloadSpriteAt('frog-idle', HERO_SCALE);
     void preloadSpriteAt('frog-idle', LOGO_FROG_SCALE);
+    for (const hat of HAT_SPRITE_NAMES) {
+      void preloadSpriteAt(hat, HERO_SCALE);
+      void preloadSpriteAt(hat, SKIN_PREVIEW_SCALE);
+    }
     void this.loadSkinPreviews();
 
     this.riverLane = {
@@ -450,7 +462,7 @@ export class TitleScene implements Scene {
     }
   }
 
-  render(r: Renderer, _alpha: number): void {
+  render(r: Renderer, alpha: number): void {
     const theme = getWorldTheme(1);
     const L = this.layout;
 
@@ -479,7 +491,7 @@ export class TitleScene implements Scene {
     // section 1), so the title reads as the game rather than a static poster.
     r.ctx.fillStyle = theme.palette.road;
     r.ctx.fillRect(0, L.roadY, CANVAS_WIDTH, L.roadH);
-    drawLaneMovers(r, this.roadLane, this.elapsed);
+    drawLaneMovers(r, this.roadLane, this.elapsed, undefined, undefined, alpha);
 
     // Grass bank, with the 3x hero sitting on it.
     drawGrassBand(r.ctx, theme, L.bankY, createRng(7)); // fixed seed: stable tufts, no per-frame flicker
@@ -488,6 +500,14 @@ export class TitleScene implements Scene {
     if (heroImg) {
       const breath = frogIdleBreath(this.elapsed);
       drawSpriteImage(r.ctx, heroImg, CANVAS_WIDTH / 2, L.heroCy, { sx: breath, sy: breath });
+      // M10: the selected skin's hat overlay, at the exact same transform as the hero sprite above
+      // (mirrors `render/draw/entities.ts`'s `drawFrog` - closes the M9 "Known gaps" note that hats
+      // were gameplay-only).
+      const heroHat = currentHatSprite();
+      const heroHatImg = heroHat ? spriteAt(heroHat, HERO_SCALE) : undefined;
+      if (heroHatImg) {
+        drawSpriteImage(r.ctx, heroHatImg, CANVAS_WIDTH / 2, L.heroCy, { sx: breath, sy: breath });
+      }
       if (this.heroBlink.blinking) {
         r.ctx.save();
         r.ctx.translate(CANVAS_WIDTH / 2, L.heroCy);
@@ -618,6 +638,14 @@ export class TitleScene implements Scene {
         r.ctx.beginPath();
         r.ctx.arc(cx, cy, radius * 0.7, 0, Math.PI * 2);
         r.ctx.fill();
+      }
+
+      // M10: the swatch's own hat overlay (closes the M9 "Known gaps" note) - hat art isn't
+      // recoloured per skin, so this reads straight from the shared sprite cache at the picker's
+      // own preview scale rather than `skinPreviews` (which only holds the recoloured frog body).
+      if (skin.hat) {
+        const hatImg = spriteAt(`hat-${skin.hat}`, SKIN_PREVIEW_SCALE);
+        if (hatImg) drawSpriteImage(r.ctx, hatImg, cx, cy);
       }
 
       if (!unlocked) {

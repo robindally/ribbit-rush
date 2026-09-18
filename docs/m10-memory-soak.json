@@ -1,0 +1,181 @@
+{
+  "url": "http://localhost:5174",
+  "mins": 10,
+  "everySecs": 60,
+  "totalSecs": 600,
+  "samples": [
+    {
+      "tSec": 0,
+      "heap": 3765004,
+      "fx": {
+        "particles": 0,
+        "popups": 0
+      },
+      "world": {
+        "score": 0,
+        "level": 1,
+        "lives": 99,
+        "gameOver": false
+      }
+    },
+    {
+      "tSec": 60,
+      "heap": 4411084,
+      "fx": {
+        "particles": 1,
+        "popups": 3
+      },
+      "world": {
+        "score": 1840,
+        "level": 1,
+        "lives": 99,
+        "gameOver": false
+      }
+    },
+    {
+      "tSec": 120,
+      "heap": 4516880,
+      "fx": {
+        "particles": 2,
+        "popups": 2
+      },
+      "world": {
+        "score": 2450,
+        "level": 1,
+        "lives": 99,
+        "gameOver": false
+      }
+    },
+    {
+      "tSec": 180,
+      "heap": 4554364,
+      "fx": {
+        "particles": 20,
+        "popups": 0
+      },
+      "world": {
+        "score": 3080,
+        "level": 1,
+        "lives": 99,
+        "gameOver": false
+      }
+    },
+    {
+      "tSec": 240,
+      "heap": 4563744,
+      "fx": {
+        "particles": 1,
+        "popups": 0
+      },
+      "world": {
+        "score": 3840,
+        "level": 1,
+        "lives": 99,
+        "gameOver": false
+      }
+    },
+    {
+      "tSec": 300,
+      "heap": 4562088,
+      "fx": {
+        "particles": 0,
+        "popups": 0
+      },
+      "world": {
+        "score": 4520,
+        "level": 1,
+        "lives": 99,
+        "gameOver": false
+      }
+    },
+    {
+      "tSec": 360,
+      "heap": 4582800,
+      "fx": {
+        "particles": 0,
+        "popups": 0
+      },
+      "world": {
+        "score": 5270,
+        "level": 1,
+        "lives": 99,
+        "gameOver": false
+      }
+    },
+    {
+      "tSec": 420,
+      "heap": 4603428,
+      "fx": {
+        "particles": 0,
+        "popups": 0
+      },
+      "world": {
+        "score": 6070,
+        "level": 1,
+        "lives": 99,
+        "gameOver": false
+      }
+    },
+    {
+      "tSec": 480,
+      "heap": 4627576,
+      "fx": {
+        "particles": 20,
+        "popups": 0
+      },
+      "world": {
+        "score": 6940,
+        "level": 1,
+        "lives": 99,
+        "gameOver": false
+      }
+    },
+    {
+      "tSec": 540,
+      "heap": 4668168,
+      "fx": {
+        "particles": 2,
+        "popups": 0
+      },
+      "world": {
+        "score": 7560,
+        "level": 1,
+        "lives": 99,
+        "gameOver": false
+      }
+    },
+    {
+      "tSec": 600,
+      "heap": 4670212,
+      "fx": {
+        "particles": 14,
+        "popups": 2
+      },
+      "world": {
+        "score": 8150,
+        "level": 1,
+        "lives": 99,
+        "gameOver": false
+      }
+    }
+  ],
+  "heapBytes": [
+    3765004,
+    4411084,
+    4516880,
+    4554364,
+    4563744,
+    4562088,
+    4582800,
+    4603428,
+    4627576,
+    4668168,
+    4670212
+  ],
+  "firstStableHeapBytes": 4411084,
+  "lastHeapBytes": 4670212,
+  "deltaBytes": 259128,
+  "deltaPct": 5.87,
+  "flat": true,
+  "errors": []
+}

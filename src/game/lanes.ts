@@ -30,6 +30,13 @@ export function moverSpeed(lane: LaneDef, mover: MoverDef): number {
  */
 export function stepLane(lane: LaneDef, dt: number): void {
   for (const m of lane.movers) {
+    // M10: record the pre-step offset for render interpolation (ARCHITECTURE.md section 4: "each
+    // mover keeps prevX") - same "px = x, then advance x" order `fx/particles.ts`'s `update()`
+    // already uses, so a caller that runs several fixed steps in one animation frame (a slow frame
+    // catching up) ends up with `prevOffset` holding only the value from just before the *last* of
+    // those steps, which is exactly what the frame's alpha (the fraction of a step *since* that
+    // last step) should interpolate from.
+    m.prevOffset = m.offset;
     const speed = moverSpeed(lane, m);
     const raw = m.offset + speed * dt;
     const wrapped = wrapValue(raw, lane.period);
@@ -38,15 +45,40 @@ export function stepLane(lane: LaneDef, dt: number): void {
   }
 }
 
-/** A mover's current left-edge x, in tiles. Enters from off-screen per the offset - maxWidth rule. */
-export function moverX(lane: LaneDef, mover: MoverDef): number {
-  return mover.offset - laneMaxWidth(lane);
+/** A mover's current left-edge x, in tiles. Enters from off-screen per the offset - maxWidth rule.
+ * `offsetOverride` lets a renderer substitute an interpolated offset (see `moverRenderOffset`)
+ * without touching the mover's own simulation state; gameplay code (collision, power-up placement)
+ * never passes it, so it always reads the real, current `mover.offset`. */
+export function moverX(lane: LaneDef, mover: MoverDef, offsetOverride?: number): number {
+  return (offsetOverride ?? mover.offset) - laneMaxWidth(lane);
 }
 
 /** The mover's x for each period-wrapped copy that could be visible (k in {-1, 0, 1}). */
-export function moverInstances(lane: LaneDef, mover: MoverDef): number[] {
-  const base = moverX(lane, mover);
+export function moverInstances(lane: LaneDef, mover: MoverDef, offsetOverride?: number): number[] {
+  const base = moverX(lane, mover, offsetOverride);
   return [base - lane.period, base, base + lane.period];
+}
+
+/** Shortest-path lerp between two values that both live in `[0, period)` and may have wrapped
+ * between them (e.g. `prev = period - 0.2`, `curr = 0.1` after one lap) - takes whichever direction
+ * covers less than half the period, so a mover about to wrap doesn't visibly snap backward across
+ * the whole lane for one interpolated frame. */
+function lerpWrapped(prev: number, curr: number, period: number, t: number): number {
+  let delta = curr - prev;
+  if (delta > period / 2) delta -= period;
+  else if (delta < -period / 2) delta += period;
+  return prev + delta * t;
+}
+
+/** M10: a mover's render-time offset, interpolated between its previous and current fixed-step
+ * offset by the loop's `alpha` (ARCHITECTURE.md section 4) - what `render/draw/entities.ts`'s
+ * `drawLaneMovers` (and the water/lighting layers that track a platform's position) pass as
+ * `moverX`/`moverInstances`'s `offsetOverride` instead of drawing at the raw, still-60Hz-stepped
+ * `mover.offset`. Falls back to the current offset (no interpolation) when there's no previous
+ * value yet - a mover on a level/crossing that just loaded. */
+export function moverRenderOffset(lane: LaneDef, mover: MoverDef, alpha: number): number {
+  if (mover.prevOffset === undefined) return mover.offset;
+  return wrapValue(lerpWrapped(mover.prevOffset, mover.offset, lane.period, alpha), lane.period);
 }
 
 export const PLATFORM_TYPES: readonly MoverType[] = ['log', 'turtle', 'croc', 'floe'];

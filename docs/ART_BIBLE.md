@@ -23,8 +23,9 @@ document disagree, this document wins.
 - **Three-quarter top-down.** Every solid object has a top face (main colour) and a front face: a
   strip along its bottom edge, 18% of the object's own drawn height (not the canvas), 22% darker
   than the top. Tall objects (bus, truck, train) use 24% height and 26% darker.
-- **Backdrop.** Everything outside the play field (HUD bands, title, cards) sits on `backdrop`
-  #14162B. The canvas clear colour is the same.
+- **Backdrop.** Everything outside the play field (title, cards, letterbox) sits on `backdrop`
+  #14162B. The canvas clear colour is the same. The two in-game HUD bands use `hudBand` #0C0D1A,
+  a step darker, so the score and lives read against the bright play field.
 - **Global light from the top-left.** Each top face carries a soft white ellipse highlight at 22%
   opacity in its top-left third.
 - **Shadows are drawn by the renderer, not baked into sprites.** Offset (2, 4) px, blur 6 px,
@@ -61,6 +62,23 @@ document disagree, this document wins.
 | 5 Frozen Fjord | #F3F7FB | #E2EBF3 | #5B6470 | #D9E3EC | #C5D3DF | #3B6FA6 | #BFE3FA | #2A5280 | #7CC7FF | #FF8FA3 | rgba(200,220,255,0.15) |
 
 grassA and grassB alternate as 1-tile mowing stripes running horizontally.
+
+### Frog skins
+
+Skins replace the three frog tokens (body / dark / light) at load. Hats are small overlay sprites
+drawn above the head and rotated with the frog. This table is authoritative; the M9 spec mirrors it.
+
+| Skin | Body | Dark | Light | Hat |
+| --- | --- | --- | --- | --- |
+| Classic | #58D65E | #3FA84A | #8BEA7B | none |
+| Toad | #C98A4B | #8F5E2E | #E9B77A | none |
+| Tree Frog | #9BE85A | #5FA832 | #FFB640 | none |
+| Poison Dart | #3E9CE6 | #1B2A1D | #7CC7FF | none |
+| Ninja | #2B2B2B | #111111 | #E8474B | red headband |
+| Swamp King | #4F7F3A | #2F5A25 | #C9F5A6 | gold crown |
+| Frost | #F3F7FB | #BFE3FA | #7CC7FF | knitted beanie |
+| Golden | #FFC83D | #C98A0B | #FFF1A8 | none |
+| Ghost | #FFFFFF at 70% alpha | #D9E3EC | #FFFFFF | none |
 
 ### Vehicles
 

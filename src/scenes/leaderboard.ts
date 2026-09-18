@@ -8,6 +8,7 @@ import * as transitions from '../fx/transitions';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../game/constants';
 import { getWorldTheme } from '../game/themes';
 import type { InputAction } from '../game/types';
+import { roundRect } from '../render/draw/background';
 import type { Renderer } from '../render/renderer';
 import {
   drawButton,
@@ -20,6 +21,8 @@ import {
 } from '../render/ui';
 
 const GOLD = '#FFC83D';
+const TAB_MUTED = 'rgba(27, 42, 29, 0.5)';
+const TAB_BASELINE = 'rgba(27, 42, 29, 0.18)';
 
 const ROW_SLOTS = 10; // matches core/save.ts's LEADERBOARD_MAX
 
@@ -116,28 +119,7 @@ export class LeaderboardScene implements Scene {
       color: INK,
     });
 
-    drawButton(
-      r,
-      this.tabRects.campaign,
-      'CAMPAIGN',
-      {
-        hover: this.focus.isHovered('tab-campaign'),
-        pressed: this.focus.isPressed('tab-campaign'),
-        focused: this.focus.isFocused('tab-campaign'),
-      },
-      { accent: this.tab === 'campaign' ? theme.palette.accentA : '#9AA08C', size: 13 },
-    );
-    drawButton(
-      r,
-      this.tabRects.endless,
-      'ENDLESS',
-      {
-        hover: this.focus.isHovered('tab-endless'),
-        pressed: this.focus.isPressed('tab-endless'),
-        focused: this.focus.isFocused('tab-endless'),
-      },
-      { accent: this.tab === 'endless' ? theme.palette.accentA : '#9AA08C', size: 13 },
-    );
+    this.renderTabs(r, theme.palette.accentA);
 
     if (this.tab === 'campaign') this.renderCampaignRows(r, x, y, w, h);
     else this.renderEndlessRows(r, x, y, w, h);
@@ -155,6 +137,62 @@ export class LeaderboardScene implements Scene {
     );
 
     transitions.render(r);
+  }
+
+  /** M10: real tabs, not two relabelled `drawButton` pills (the M9 "Known gaps" note this closes) -
+   * a shared baseline across the whole row, an accent underline only beneath the *active* tab, bold
+   * ink label on the active tab vs. a muted one on the inactive tab, and the kit's own cream focus
+   * ring for keyboard/gamepad parity with every other control. */
+  private renderTabs(r: Renderer, accent: string): void {
+    const tabs: { tab: BoardTab; label: string; id: string }[] = [
+      { tab: 'campaign', label: 'CAMPAIGN', id: 'tab-campaign' },
+      { tab: 'endless', label: 'ENDLESS', id: 'tab-endless' },
+    ];
+    const first = this.tabRects.campaign;
+    const last = this.tabRects.endless;
+    const baselineY = first.y + first.h;
+
+    // One continuous baseline under both tabs, so the active one's underline reads as "part of
+    // this row" rather than a floating bar.
+    r.ctx.save();
+    r.ctx.fillStyle = TAB_BASELINE;
+    r.ctx.fillRect(first.x, baselineY - 1, last.x + last.w - first.x, 2);
+    r.ctx.restore();
+
+    for (const { tab, label, id } of tabs) {
+      const rect = this.tabRects[tab];
+      const active = this.tab === tab;
+      const hovered = this.focus.isHovered(id);
+      const cx = rect.x + rect.w / 2;
+
+      r.ctx.save();
+      if (hovered && !active) r.ctx.globalAlpha = 0.85;
+      r.text(label, cx, rect.y + rect.h * 0.42, {
+        size: 15,
+        weight: 700,
+        align: 'center',
+        color: active ? INK : TAB_MUTED,
+      });
+      r.ctx.restore();
+
+      if (active) {
+        r.ctx.save();
+        r.ctx.fillStyle = accent;
+        roundRect(r, rect.x + rect.w * 0.1, baselineY - 2, rect.w * 0.8, 3, 1.5);
+        r.ctx.fill();
+        r.ctx.restore();
+      }
+
+      if (this.focus.isFocused(id)) {
+        r.ctx.save();
+        r.ctx.strokeStyle = '#FFF7E6';
+        r.ctx.lineWidth = 2;
+        r.ctx.beginPath();
+        r.ctx.rect(rect.x + 2, rect.y - 2, rect.w - 4, rect.h + 4);
+        r.ctx.stroke();
+        r.ctx.restore();
+      }
+    }
   }
 
   private renderCampaignRows(r: Renderer, x: number, y: number, w: number, h: number): void {
