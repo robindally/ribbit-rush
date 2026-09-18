@@ -6,9 +6,13 @@ document disagree, this document wins.
 ## 1. Identity
 
 - **Title:** RIBBIT RUSH. (Working folder stays `frogger`.)
-- **Logo:** Fredoka Bold, each letter rotated alternately -3 and +3 degrees, lime-to-green vertical
-  gradient (#8BEA7B top to #3FA84A bottom), a 4 px dark-green (#2F7A3A) extruded bottom edge, and a
-  soft white highlight across the top third. The frog hero peeks over the first R.
+- **Logo:** the text "RIBBIT RUSH" with no punctuation. Fredoka Bold at 72 px, each letter rotated
+  alternately -3 and +3 degrees, lime-to-green vertical gradient (#8BEA7B top to #3FA84A bottom),
+  a 5 px dark-green (#2F7A3A) extruded bottom edge, and a soft white highlight across the top
+  third. Rendered at device pixel ratio so it is crisp. The hero frog (at 1.5x) sits behind the
+  first R with its eyes and the top of its head showing above the letter.
+- **Hero frog.** Any frog drawn larger than 1x (title, cards) is rasterised from the SVG at that
+  size, never upscaled from the 1x sprite.
 - **Mood:** bright, bouncy, generous. Nothing gritty. Danger is cartoon danger.
 
 ## 2. Shape language
@@ -17,8 +21,10 @@ document disagree, this document wins.
   circles and ellipses.
 - **No black outlines.** Edges are a 1.5 px inner stroke 15% darker than the fill.
 - **Three-quarter top-down.** Every solid object has a top face (main colour) and a front face: a
-  strip along its bottom edge, 18% of the sprite height, 22% darker than the top. Tall objects (bus,
-  truck, train) use 24% height and 26% darker.
+  strip along its bottom edge, 18% of the object's own drawn height (not the canvas), 22% darker
+  than the top. Tall objects (bus, truck, train) use 24% height and 26% darker.
+- **Backdrop.** Everything outside the play field (HUD bands, title, cards) sits on `backdrop`
+  #14162B. The canvas clear colour is the same.
 - **Global light from the top-left.** Each top face carries a soft white ellipse highlight at 22%
   opacity in its top-left third.
 - **Shadows are drawn by the renderer, not baked into sprites.** Offset (2, 4) px, blur 6 px,
@@ -121,6 +127,14 @@ set and the specs below, and Fable reviews every one in a screenshot.
   taller, so use the 24%/26% front-face rule. Motorbike is a thin body with a round-headed rider.
 - **Crocodile (2x1).** Long rounded body, snout with a white tooth zigzag, two eye bumps on top,
   a tail tapering to the left. Belly colour band down the centre.
+- **Crocodile in a home slot (`croc-slot`, 1x1).** Not the lane sprite. Open jaws seen from above
+  pointing down toward the player, filling the slot: upper jaw at the top with two eye bumps, lower
+  jaw below, white tooth zigzags on both, dark mouth interior between them. It must never draw
+  outside its tile.
+- **Motorbike (1x1, body 29 px wide, faces right).** Two dark wheels in line along the direction
+  of travel (front wheel at the right, rear at the left, each about 10 x 6 px), a narrow body
+  between them, and the rider on top: a round helmet in the rider colour, 9 px, slightly forward
+  of centre, with two small shoulder ellipses behind it. A 1 px headlight dot at the front.
 - **Snake (1.5x1).** S-curve body 8 px thick, diamond pattern, small head with two dots for eyes,
   forked tongue.
 - **Otter (1x1).** Rounded body, small ears, lighter muzzle, tail trailing.
@@ -135,8 +149,8 @@ set and the specs below, and Fable reviews every one in a screenshot.
 - **Hop.** 110 ms. Scale Y goes 1.0 to 1.25 at t=0.4, then 0.8 at landing, then back to 1.0 over
   90 ms with scale X at 1.3 during the squash. Arc height 0.4 tile. Use frog-jump between t=0.15
   and t=0.85, frog-idle otherwise.
-- **Idle.** Breathe: scale 1 plus or minus 0.02 at 1 Hz. Blink every 3 to 5 s by drawing a
-  frogBody ellipse over each eye for 100 ms.
+- **Idle.** Breathe: scale 1 plus or minus 0.02 at 1 Hz. Blink every 3 to 5 s (uniform random
+  interval, re-rolled after each blink) by drawing a frogBody ellipse over each eye for 100 ms.
 - **Death, squish.** Scale Y to 0.15, scale X to 1.6 over 120 ms, hold 500 ms, fade. Two tyre
   marks appear across the frog.
 - **Death, drown.** Frog scales to 0.6 and sinks 6 px with alpha to 0 over 400 ms. Splash ring plus
