@@ -66,16 +66,48 @@ export function frogIdleBreath(elapsed: number): number {
   return 1 + 0.02 * Math.sin(elapsed * Math.PI * 2);
 }
 
-// The bible specifies a blink "every 3 to 5s" without pinning an exact value or a source of
-// randomness, and blink timing has no gameplay effect - a fixed period (the midpoint of that
-// range) keeps this deterministic and easy to eyeball in review, rather than wiring a second RNG
-// stream through the render layer for a cosmetic-only effect. See docs/specs/M3-report.md.
-const BLINK_PERIOD_S = 4;
+// Blink every 3 to 5s, uniform random, re-rolled after each blink (bible section 5, "Idle").
+// That "re-rolled" requirement means this can't be a pure function of an elapsed clock (which
+// would have to repeat on a fixed period); it needs a small stateful timer instead, ticked once
+// per fixed update step wherever a blinking frog lives (`PlayScene`/`TitleScene`) and read at
+// render time. Cosmetic only, no gameplay effect.
+const BLINK_MIN_S = 3;
+const BLINK_MAX_S = 5;
 const BLINK_DURATION_S = 0.1;
 
-/** Whether the frog's eyelids should be drawn closed this instant. */
-export function frogBlink(elapsed: number): boolean {
-  return wrap(elapsed, BLINK_PERIOD_S) < BLINK_DURATION_S;
+export interface BlinkState {
+  /** Seconds until the next blink starts (while not blinking). */
+  timer: number;
+  blinking: boolean;
+  /** Seconds into the current blink (while blinking). */
+  blinkT: number;
+}
+
+function rollBlinkInterval(rng: () => number): number {
+  return BLINK_MIN_S + rng() * (BLINK_MAX_S - BLINK_MIN_S);
+}
+
+export function createBlinkState(rng: () => number = Math.random): BlinkState {
+  return { timer: rollBlinkInterval(rng), blinking: false, blinkT: 0 };
+}
+
+/** Advances a blink timer by `dt`; call once per fixed update tick (not per render call, which
+ * can run more than once per tick under the loop's alpha interpolation). */
+export function tickBlink(state: BlinkState, dt: number, rng: () => number = Math.random): void {
+  if (state.blinking) {
+    state.blinkT += dt;
+    if (state.blinkT >= BLINK_DURATION_S) {
+      state.blinking = false;
+      state.blinkT = 0;
+      state.timer = rollBlinkInterval(rng);
+    }
+    return;
+  }
+  state.timer -= dt;
+  if (state.timer <= 0) {
+    state.blinking = true;
+    state.blinkT = 0;
+  }
 }
 
 // --- Frog: death animations (bible section 5, "Death, ...") ---

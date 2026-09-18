@@ -43,10 +43,10 @@ function viewBoxTiles(svgSource: string): { tilesW: number; tilesH: number } {
   return { tilesW: w / TILE, tilesH: h / TILE };
 }
 
-async function rasterize(svgSource: string, dpr: number): Promise<SpriteImage> {
+async function rasterize(svgSource: string, dpr: number, scale = 1): Promise<SpriteImage> {
   const { tilesW, tilesH } = viewBoxTiles(svgSource);
-  const logicalW = tilesW * TILE;
-  const logicalH = tilesH * TILE;
+  const logicalW = tilesW * TILE * scale;
+  const logicalH = tilesH * TILE * scale;
   const pxW = Math.max(1, Math.round(logicalW * dpr));
   const pxH = Math.max(1, Math.round(logicalH * dpr));
 
@@ -107,4 +107,60 @@ export async function loadSprites(): Promise<SpriteAtlas> {
 export function getSpriteAtlas(): SpriteAtlas {
   if (!loaded) throw new Error('Sprite atlas not loaded yet - call loadSprites() first');
   return loaded;
+}
+
+// --- Rasterised-at-scale cache (ART_BIBLE.md section 1, "Hero frog") ---
+//
+// Any sprite drawn larger than 1x (the title hero frog, the frog peeking behind the logo) must be
+// rasterised from the SVG at that size, never upscaled from the 1x atlas entry above - upscaling a
+// TILE*dpr-backed canvas by a further 1.5x/3x ctx.scale blurs badly. `spriteAt` rasterises once per
+// (name, scale) pair at `TILE * scale * dpr` px per tile and caches it.
+
+let byName: Map<string, string> | null = null;
+
+function rawSource(name: string): string | undefined {
+  if (!byName) {
+    byName = new Map(Object.entries(rawSprites).map(([path, source]) => [nameFromPath(path), source]));
+  }
+  return byName.get(name);
+}
+
+const scaledCache = new Map<string, SpriteImage>();
+const scaledPending = new Map<string, Promise<SpriteImage | undefined>>();
+
+/**
+ * Kicks off (and caches) rasterising `name` at `TILE * scale * dpr` px per tile. Call this during
+ * scene/boot setup and await it so the first `spriteAt` call of a frame already has the image
+ * ready - `spriteAt` itself is synchronous and returns `undefined` on a cache miss rather than
+ * blocking a render.
+ */
+export function preloadSpriteAt(name: string, scale: number): Promise<SpriteImage | undefined> {
+  const key = `${name}@${scale}`;
+  const cached = scaledCache.get(key);
+  if (cached) return Promise.resolve(cached);
+  let pending = scaledPending.get(key);
+  if (!pending) {
+    const source = rawSource(name);
+    if (!source) return Promise.resolve(undefined);
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    pending = rasterize(source, dpr, scale).then((img) => {
+      scaledCache.set(key, img);
+      return img;
+    });
+    scaledPending.set(key, pending);
+  }
+  return pending;
+}
+
+/**
+ * Synchronous read of the `preloadSpriteAt(name, scale)` cache. Returns `undefined` (and kicks off
+ * rasterisation for next time) on a cache miss, so a caller that can't await should either accept
+ * skipping a draw for a frame or, better, `preloadSpriteAt` the sizes it needs up front.
+ */
+export function spriteAt(name: string, scale: number): SpriteImage | undefined {
+  const key = `${name}@${scale}`;
+  const cached = scaledCache.get(key);
+  if (cached) return cached;
+  void preloadSpriteAt(name, scale);
+  return undefined;
 }

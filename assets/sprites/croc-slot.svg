@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Ribbit Rush crocodile, home-slot hazard (1x1). Not croc.svg (the 2x1 lane mover, reserved
+       for M6) - open jaws seen from above, pointing down toward the player, filling the slot.
+       Never draws outside its tile - see ART_BIBLE.md section 4. -->
+
+  <!-- lower jaw: shade rim then top face -->
+  <rect x="4" y="26" width="40" height="20" rx="10" fill="#3E632D"/>
+  <rect x="5" y="27" width="38" height="18" rx="9" fill="#4F7F3A"/>
+
+  <!-- upper jaw: shade rim then top face -->
+  <rect x="4" y="2" width="40" height="20" rx="10" fill="#3E632D"/>
+  <rect x="5" y="3" width="38" height="18" rx="9" fill="#4F7F3A"/>
+
+  <!-- eye bumps on top of the upper jaw -->
+  <g>
+    <circle cx="15" cy="8.5" r="4.6" fill="#4F7F3A"/>
+    <circle cx="33" cy="8.5" r="4.6" fill="#4F7F3A"/>
+    <circle cx="15" cy="8" r="2" fill="#1B2A1D"/>
+    <circle cx="33" cy="8" r="2" fill="#1B2A1D"/>
+  </g>
+
+  <!-- dark mouth interior between the jaws -->
+  <rect x="6" y="19" width="36" height="10" rx="4" fill="#3B1414"/>
+
+  <!-- tooth zigzags, upper and lower, interlocking across the dark interior -->
+  <polyline points="8,19 12,25 16,19 20,25 24,19 28,25 32,19 36,25 40,19"
+            fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="8,29 12,23 16,29 20,23 24,29 28,23 32,29 36,23 40,29"
+            fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

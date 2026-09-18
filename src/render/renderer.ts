@@ -2,7 +2,7 @@
 // section 11.
 
 import { CANVAS_HEIGHT, CANVAS_WIDTH, TILE } from '../game/constants';
-import type { SpriteAtlas } from './sprites';
+import type { SpriteAtlas, SpriteImage } from './sprites';
 
 export interface SpriteOpts {
   rot?: number;
@@ -29,6 +29,38 @@ export interface Renderer {
   sprite(name: string, x: number, y: number, opts?: SpriteOpts): void;
   shadow(x: number, y: number, w: number, h: number, scale?: number): void;
   text(s: string, x: number, y: number, opts?: TextOpts): void;
+}
+
+/**
+ * Draws an already-rasterised `SpriteImage` (from the 1x atlas, or from `sprites.ts`'s
+ * `spriteAt`/`preloadSpriteAt` cache for anything drawn larger than 1x - ART_BIBLE.md section 1)
+ * at logical position (x, y). Shared by `Renderer.sprite` (name -> atlas lookup) and any caller
+ * that already holds a `SpriteImage` directly, e.g. the title scene's hero/logo frogs.
+ */
+export function drawSpriteImage(
+  ctx: CanvasRenderingContext2D,
+  img: SpriteImage,
+  x: number,
+  y: number,
+  opts: SpriteOpts = {},
+): void {
+  const anchor = opts.anchor ?? 'center';
+  const sx = opts.sx ?? 1;
+  const sy = opts.sy ?? 1;
+  // img.width/height are logical px (already scaled from the sprite's SVG viewBox), not the
+  // backing canvas's device-pixel size - see render/sprites.ts.
+  const w = img.width * sx;
+  const h = img.height * sy;
+
+  ctx.save();
+  ctx.globalAlpha = opts.alpha ?? 1;
+  ctx.translate(x, y);
+  if (opts.rot) ctx.rotate(opts.rot);
+  if (opts.flipX) ctx.scale(-1, 1);
+  const drawX = anchor === 'center' ? -w / 2 : 0;
+  const drawY = anchor === 'center' ? -h / 2 : 0;
+  ctx.drawImage(img.canvas, drawX, drawY, w, h);
+  ctx.restore();
 }
 
 export function createRenderer(canvas: HTMLCanvasElement, atlas: SpriteAtlas): Renderer {
@@ -61,23 +93,7 @@ export function createRenderer(canvas: HTMLCanvasElement, atlas: SpriteAtlas): R
   function sprite(name: string, x: number, y: number, opts: SpriteOpts = {}): void {
     const img = atlas.get(name);
     if (!img) return;
-    const anchor = opts.anchor ?? 'center';
-    const sx = opts.sx ?? 1;
-    const sy = opts.sy ?? 1;
-    // img.width/height are logical px (already scaled from the sprite's SVG viewBox), not the
-    // backing canvas's device-pixel size - see render/sprites.ts.
-    const w = img.width * sx;
-    const h = img.height * sy;
-
-    ctx.save();
-    ctx.globalAlpha = opts.alpha ?? 1;
-    ctx.translate(x, y);
-    if (opts.rot) ctx.rotate(opts.rot);
-    if (opts.flipX) ctx.scale(-1, 1);
-    const drawX = anchor === 'center' ? -w / 2 : 0;
-    const drawY = anchor === 'center' ? -h / 2 : 0;
-    ctx.drawImage(img.canvas, drawX, drawY, w, h);
-    ctx.restore();
+    drawSpriteImage(ctx, img, x, y, opts);
   }
 
   function shadow(x: number, y: number, w: number, h: number, scale = 1): void {

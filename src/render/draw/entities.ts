@@ -6,7 +6,6 @@ import { moverInstances } from '../../game/lanes';
 import type { Dir, Frog, LaneDef, MoverDef } from '../../game/types';
 import {
   busBounceTiles,
-  frogBlink,
   frogDeathVisual,
   frogHopArc,
   frogHopScale,
@@ -145,8 +144,10 @@ function drawFrogDeath(r: Renderer, frog: Frog, cx: number, groundY: number): vo
 /** Draws the frog: hop arc + squash-and-stretch, idle breathing/blink, or a death tween,
  * dispatched from `frog.state`/`frog.stateT`/`frog.hopT` - all already part of the tested Frog
  * type, so none of this needs new gameplay-side state. `elapsed` is the world's simulation clock
- * (drives idle breathing/blink, which have no gameplay effect). */
-export function drawFrog(r: Renderer, frog: Frog, elapsed: number): void {
+ * (drives idle breathing, which has no gameplay effect). `blinking` comes from the caller's own
+ * `BlinkState` (ticked once per fixed update step - see render/anim.ts), since the randomised,
+ * re-rolled blink timer needs state that outlives a single render call. */
+export function drawFrog(r: Renderer, frog: Frog, elapsed: number, blinking: boolean): void {
   const cx = (frog.x + 0.5) * TILE;
   const groundY = frog.row * TILE + TILE / 2;
 
@@ -180,7 +181,7 @@ export function drawFrog(r: Renderer, frog: Frog, elapsed: number): void {
     sy: scale.scaleY,
   });
 
-  if (!hopping && frogBlink(elapsed)) {
+  if (!hopping && blinking) {
     drawBlinkOverlay(r, cx, y, rot, scale);
   }
 }

@@ -3,48 +3,94 @@ import type { SaveData } from '../core/save';
 import { CANVAS_HEIGHT, CANVAS_WIDTH, TILE } from '../game/constants';
 import { getWorldTheme } from '../game/themes';
 import type { InputAction, LaneDef } from '../game/types';
-import { frogBlink, frogIdleBreath } from '../render/anim';
+import { createBlinkState, frogIdleBreath, tickBlink, type BlinkState } from '../render/anim';
 import { drawWaterAnimated } from '../render/draw/water';
-import type { Renderer } from '../render/renderer';
+import { drawSpriteImage, type Renderer } from '../render/renderer';
+import { preloadSpriteAt, spriteAt } from '../render/sprites';
 import { PlayScene } from './play';
 
-const LOGO_TEXT = 'RIBBIT RUSH.';
-const LOGO_FONT_SIZE = 62;
+const LOGO_TEXT = 'RIBBIT RUSH';
+const LOGO_FONT_SIZE = 72;
 const LOGO_LIME = '#8BEA7B';
 const LOGO_GREEN = '#3FA84A';
 const LOGO_EDGE = '#2F7A3A';
+const LOGO_EXTRUDE_PX = 5;
+
+// Any frog drawn above 1x must be rasterised from the SVG at that size (ART_BIBLE.md section 1),
+// so the title pre-warms both sizes it needs: the hero below the logo, and the frog peeking
+// behind the first letter. `spriteAt` would otherwise return undefined on the first frame or two
+// while rasterisation is in flight.
+const HERO_SCALE = 3;
+const LOGO_FROG_SCALE = 1.5;
+
+interface LogoLayout {
+  canvas: HTMLCanvasElement;
+  /** Logical px - already in the same coordinate space as the renderer's ctx. */
+  width: number;
+  height: number;
+  /** Centre-x and top-y of the first glyph, in the canvas's own logical coordinate space, so the
+   * hero-behind-the-letter frog (drawn separately, underneath) can be positioned without
+   * duplicating this text-layout math. */
+  firstGlyphCenterX: number;
+  firstGlyphTopY: number;
+}
 
 /**
  * Pre-renders the logo treatment (ART_BIBLE.md section 1) once: each letter individually rotated
- * alternately -3/+3 degrees, a lime-to-green vertical gradient, a 4px dark-green extruded bottom
+ * alternately -3/+3 degrees, a lime-to-green vertical gradient, a 5px dark-green extruded bottom
  * edge, and a soft white top-third highlight. Cached so no gradient is created per frame (M3 spec
- * section 7).
+ * section 7). Built at `width * dpr` x `height * dpr` with `ctx.scale(dpr, dpr)` so it rasterises
+ * crisply on high-DPI screens, but the returned `width`/`height` stay in logical px - the caller
+ * draws at that logical size, never at the backing canvas's own (device-pixel) dimensions.
  */
-function buildLogoCanvas(): HTMLCanvasElement {
-  const width = 600;
-  const height = 130;
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return canvas;
+function buildLogoCanvas(dpr: number): LogoLayout {
+  const measureCtx = document.createElement('canvas').getContext('2d');
+  const chars = [...LOGO_TEXT];
+  const font = `700 ${LOGO_FONT_SIZE}px Fredoka, sans-serif`;
+  let widths: number[];
+  if (measureCtx) {
+    measureCtx.font = font;
+    widths = chars.map((ch) => measureCtx.measureText(ch).width);
+  } else {
+    widths = chars.map((ch) => (ch === ' ' ? LOGO_FONT_SIZE * 0.32 : LOGO_FONT_SIZE * 0.62));
+  }
+  const totalWidth = widths.reduce((a, b) => a + b, 0);
 
-  ctx.font = `700 ${LOGO_FONT_SIZE}px Fredoka, sans-serif`;
+  const sidePad = 16;
+  const width = totalWidth + sidePad * 2;
+  const ascent = LOGO_FONT_SIZE * 0.78;
+  const height = ascent + LOGO_EXTRUDE_PX + LOGO_FONT_SIZE * 0.18;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(width * dpr));
+  canvas.height = Math.max(1, Math.round(height * dpr));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    return { canvas, width, height, firstGlyphCenterX: width / 2, firstGlyphTopY: 0 };
+  }
+  ctx.scale(dpr, dpr);
+
+  ctx.font = font;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
 
-  const chars = [...LOGO_TEXT];
-  const widths = chars.map((ch) => ctx.measureText(ch).width);
-  const totalWidth = widths.reduce((a, b) => a + b, 0);
-  let cursorX = (width - totalWidth) / 2;
-  const baselineY = height * 0.68;
-  const ascent = LOGO_FONT_SIZE * 0.78;
+  let cursorX = sidePad;
+  const baselineY = height - LOGO_FONT_SIZE * 0.1;
+
+  let firstGlyphCenterX = width / 2;
+  let firstGlyphTopY = baselineY - ascent;
+  let firstGlyphSeen = false;
 
   chars.forEach((ch, i) => {
     const charW = widths[i];
     if (ch === ' ') {
       cursorX += charW;
       return;
+    }
+    if (!firstGlyphSeen) {
+      firstGlyphCenterX = cursorX + charW / 2;
+      firstGlyphTopY = baselineY - ascent;
+      firstGlyphSeen = true;
     }
     const rot = (i % 2 === 0 ? -3 : 3) * (Math.PI / 180);
 
@@ -53,9 +99,9 @@ function buildLogoCanvas(): HTMLCanvasElement {
     ctx.rotate(rot);
     ctx.translate(-charW / 2, 0);
 
-    // 4px dark-green extruded bottom edge, drawn first so it peeks out beneath the top face.
+    // 5px dark-green extruded bottom edge, drawn first so it peeks out beneath the top face.
     ctx.fillStyle = LOGO_EDGE;
-    ctx.fillText(ch, 0, 4);
+    ctx.fillText(ch, 0, LOGO_EXTRUDE_PX);
 
     // Lime-to-green vertical gradient top face.
     const grad = ctx.createLinearGradient(0, -ascent, 0, 0);
@@ -74,7 +120,7 @@ function buildLogoCanvas(): HTMLCanvasElement {
     cursorX += charW;
   });
 
-  return canvas;
+  return { canvas, width, height, firstGlyphCenterX, firstGlyphTopY };
 }
 
 // A synthetic river "lane" purely to reuse draw/water.ts's animated streak-band renderer for the
@@ -90,18 +136,25 @@ const TITLE_RIVER_LANE: LaneDef = {
 };
 
 export class TitleScene implements Scene {
-  private logoCanvas: HTMLCanvasElement;
+  private logo: LogoLayout;
   private elapsed = 0;
+  private heroBlink: BlinkState = createBlinkState();
 
   constructor(
     private scenes: SceneManager,
     private save: SaveData,
   ) {
-    this.logoCanvas = buildLogoCanvas();
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    this.logo = buildLogoCanvas(dpr);
+    // Kick rasterisation off now so `spriteAt` below has real bitmaps by the first render call
+    // rather than skipping a frame - see render/sprites.ts.
+    void preloadSpriteAt('frog-idle', HERO_SCALE);
+    void preloadSpriteAt('frog-idle', LOGO_FROG_SCALE);
   }
 
   update(dt: number): void {
     this.elapsed += dt;
+    tickBlink(this.heroBlink, dt);
   }
 
   render(r: Renderer, _alpha: number): void {
@@ -121,32 +174,39 @@ export class TitleScene implements Scene {
     r.ctx.fillRect(0, bandY + RIVER_BAND_HEIGHT - 3, CANVAS_WIDTH, 3);
     r.ctx.globalAlpha = 1;
 
+    const logoX = (CANVAS_WIDTH - this.logo.width) / 2;
+    const logoY = bandY + RIVER_BAND_HEIGHT / 2 - this.logo.height / 2;
+
+    // 1.5x frog behind the first letter, drawn before the logo so only its eyes and the top of
+    // its head show above the letter (ART_BIBLE.md section 1).
+    const logoFrog = spriteAt('frog-idle', LOGO_FROG_SCALE);
+    if (logoFrog) {
+      const frogCx = logoX + this.logo.firstGlyphCenterX;
+      const frogCy = logoY + this.logo.firstGlyphTopY + logoFrog.height * 0.32;
+      drawSpriteImage(r.ctx, logoFrog, frogCx, frogCy);
+    }
+
     // Logo, centred over the river band.
-    const logoX = (CANVAS_WIDTH - this.logoCanvas.width) / 2;
-    const logoY = bandY + RIVER_BAND_HEIGHT / 2 - this.logoCanvas.height / 2;
-    r.ctx.drawImage(this.logoCanvas, logoX, logoY);
+    r.ctx.drawImage(this.logo.canvas, logoX, logoY, this.logo.width, this.logo.height);
 
-    // Small hero frog peeking over the first letter of the logo.
-    r.sprite('frog-idle', logoX + 22, logoY + 36, { sx: 0.5, sy: 0.5 });
-
-    // Larger 3x idle-breathing hero frog, beside/below the logo block.
-    const heroScale = 3;
-    const heroY = logoY + this.logoCanvas.height + TILE * 1.7;
-    const breath = frogIdleBreath(this.elapsed);
-    r.sprite('frog-idle', CANVAS_WIDTH / 2, heroY, {
-      sx: heroScale * breath,
-      sy: heroScale * breath,
-    });
-    if (frogBlink(this.elapsed)) {
-      r.ctx.save();
-      r.ctx.translate(CANVAS_WIDTH / 2, heroY);
-      r.ctx.scale(heroScale * breath, heroScale * breath);
-      r.ctx.fillStyle = '#58D65E';
-      r.ctx.beginPath();
-      r.ctx.ellipse(-8.5, -15.5, 5.2, 3.9, 0, 0, Math.PI * 2);
-      r.ctx.ellipse(8.5, -15.5, 5.2, 3.9, 0, 0, Math.PI * 2);
-      r.ctx.fill();
-      r.ctx.restore();
+    // 3x idle-breathing hero frog, below the logo block - rasterised at 3x, not upscaled from the
+    // 1x sprite (ART_BIBLE.md section 1).
+    const heroImg = spriteAt('frog-idle', HERO_SCALE);
+    if (heroImg) {
+      const heroY = logoY + this.logo.height + TILE * 1.7;
+      const breath = frogIdleBreath(this.elapsed);
+      drawSpriteImage(r.ctx, heroImg, CANVAS_WIDTH / 2, heroY, { sx: breath, sy: breath });
+      if (this.heroBlink.blinking) {
+        r.ctx.save();
+        r.ctx.translate(CANVAS_WIDTH / 2, heroY);
+        r.ctx.scale(HERO_SCALE * breath, HERO_SCALE * breath);
+        r.ctx.fillStyle = '#58D65E';
+        r.ctx.beginPath();
+        r.ctx.ellipse(-8.5, -15.5, 5.2, 3.9, 0, 0, Math.PI * 2);
+        r.ctx.ellipse(8.5, -15.5, 5.2, 3.9, 0, 0, Math.PI * 2);
+        r.ctx.fill();
+        r.ctx.restore();
+      }
     }
 
     r.text(`HI-SCORE ${this.save.hiScore}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.86, {

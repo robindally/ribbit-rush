@@ -1,24 +1,36 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
-  <!-- Ribbit Rush motorbike, faces right. Thin body (29px), fast, low mass. -->
-  <!-- wheels poke past the frame's top and bottom edges -->
+  <!-- Ribbit Rush motorbike, faces right. Two wheels in line along the direction of travel
+       (front at the right, rear at the left), a narrow 29px body between them - the body is
+       shorter than the wheels so each wheel pokes past its top and bottom edge, matching the
+       template's wheel-poke convention. Rider on top: round helmet forward of centre with two
+       shoulder ellipses behind it, plus a 1px headlight dot at the front. See ART_BIBLE.md
+       section 4. -->
+
+  <!-- wheels: rear (left) and front (right), ~10x6.5px, in line along the travel axis -->
   <g fill="#22242A">
-    <circle cx="13.5" cy="24" r="7.4"/>
-    <circle cx="34.5" cy="24" r="7.4"/>
+    <ellipse cx="12.5" cy="24" rx="5" ry="3.3"/>
+    <ellipse cx="35.5" cy="24" rx="5" ry="3.3"/>
   </g>
-  <g fill="#3A3C3F">
-    <circle cx="13.5" cy="24" r="3.2"/>
-    <circle cx="34.5" cy="24" r="3.2"/>
+
+  <!-- narrow body (29px wide) between the wheels, shorter than the wheels so they poke past its
+       top/bottom edges: front face then top face -->
+  <rect x="9.5" y="22" width="29" height="4.2" rx="2.1" fill="#1E1E1E"/>
+  <rect x="9.5" y="22" width="29" height="3.2" rx="2.1" fill="#2B2B2B" stroke="#252525" stroke-width="0.8"/>
+
+  <!-- rider: two small shoulder ellipses behind the helmet -->
+  <g fill="#E8474B">
+    <ellipse cx="16.5" cy="21.5" rx="3.6" ry="4.4" transform="rotate(-8 16.5 21.5)"/>
+    <ellipse cx="21" cy="17" rx="3.2" ry="4" transform="rotate(-8 21 17)"/>
   </g>
-  <!-- frame: front face then top face -->
-  <rect x="9.5" y="20.5" width="29" height="8.5" rx="4" fill="#222222"/>
-  <rect x="9.5" y="20.5" width="29" height="6.8" rx="4" fill="#2B2B2B" stroke="#252525" stroke-width="1.2"/>
-  <!-- rider -->
-  <ellipse cx="21" cy="15" rx="6.5" ry="8.5" fill="#E8474B" transform="rotate(-12 21 15)"/>
-  <circle cx="27.5" cy="9.5" r="5.2" fill="#1B2A1D"/>
-  <ellipse cx="26" cy="7.6" rx="1.8" ry="1.2" fill="#FFFFFF" opacity="0.3"/>
-  <!-- highlight -->
-  <ellipse cx="16" cy="22" rx="4.5" ry="1.6" fill="#FFFFFF" opacity="0.2"/>
-  <!-- headlight (front, right) and taillight (rear, left) -->
-  <circle cx="37.5" cy="24" r="1.8" fill="#FFF1A8"/>
-  <circle cx="10.5" cy="24" r="1.6" fill="#FF3B3B"/>
+
+  <!-- helmet: 9px round, rider colour, slightly forward of the bike's centre (x=24) -->
+  <circle cx="27" cy="12" r="4.5" fill="#E8474B"/>
+  <ellipse cx="25.4" cy="10.2" rx="1.7" ry="1.1" fill="#FFFFFF" opacity="0.3"/>
+
+  <!-- tank highlight -->
+  <ellipse cx="15.5" cy="23" rx="4" ry="1.2" fill="#FFFFFF" opacity="0.18"/>
+
+  <!-- 1px headlight dot at the front, taillight at the rear -->
+  <circle cx="38" cy="24" r="0.9" fill="#FFF1A8"/>
+  <circle cx="10" cy="24" r="1.3" fill="#FF3B3B"/>
 </svg>

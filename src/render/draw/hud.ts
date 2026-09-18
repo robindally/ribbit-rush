@@ -69,13 +69,25 @@ export function drawHud(r: Renderer, hud: HudState): void {
 
   const bottomY = HUD_BOTTOM_ROW * TILE;
 
-  // Lives, as small frog-idle icons bottom-left.
+  // Lives, as small frog-idle icons bottom-left: at most 5 icons; beyond that, 5 icons + "xN"
+  // (the dev hook and extra-life pickups can both push lives well past 5).
   const liveScale = 0.42;
   const liveSpacing = TILE * 0.5;
-  for (let i = 0; i < hud.lives; i++) {
+  const MAX_LIFE_ICONS = 5;
+  const iconCount = Math.min(hud.lives, MAX_LIFE_ICONS);
+  for (let i = 0; i < iconCount; i++) {
     r.sprite('frog-idle', 16 + i * liveSpacing + (TILE * liveScale) / 2, bottomY + TILE / 2, {
       sx: liveScale,
       sy: liveScale,
+    });
+  }
+  if (hud.lives > MAX_LIFE_ICONS) {
+    r.text(`x${hud.lives}`, 16 + iconCount * liveSpacing + 4, bottomY + TILE / 2, {
+      size: 17,
+      weight: 700,
+      align: 'left',
+      color: CREAM,
+      outline: INK,
     });
   }
 

@@ -164,7 +164,9 @@ export function drawHomeSlots(
       const scale = tSince !== undefined ? homeLandingScale(tSince) : 1;
       r.sprite('frog-idle', cx, cy, { sx: scale, sy: scale });
     } else if (state === 'croc') {
-      r.sprite('croc', cx, cy);
+      // croc-slot.svg (1x1), not croc.svg (2x1 lane mover, reserved for M6) - the 2x1 sprite
+      // bled off the canvas edge in the leftmost/rightmost home slots. ART_BIBLE.md section 4.
+      r.sprite('croc-slot', cx, cy);
     } else if (state === 'fly') {
       r.sprite('fly', cx, cy);
     } else {

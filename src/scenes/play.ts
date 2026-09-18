@@ -10,6 +10,7 @@ import type { Renderer } from '../render/renderer';
 import { buildStaticLayer, drawHomeSlots, drawStaticLayer } from '../render/draw/background';
 import { drawFrog, drawLaneMovers } from '../render/draw/entities';
 import { drawHud } from '../render/draw/hud';
+import { createBlinkState, tickBlink, type BlinkState } from '../render/anim';
 import { drawPlatformContactShadows, drawWaterAnimated } from '../render/draw/water';
 import { GameOverScene } from './gameOver';
 import { PauseScene } from './pause';
@@ -24,6 +25,7 @@ export class PlayScene implements Scene {
   private staticLayer: HTMLCanvasElement;
   private staticLayerLevel = -1;
   private homeAnims = new Map<number, number>();
+  private frogBlink: BlinkState = createBlinkState();
 
   constructor(
     private scenes: SceneManager,
@@ -63,6 +65,7 @@ export class PlayScene implements Scene {
   update(dt: number): void {
     this.world.update(dt);
     if (this.world.score > this.save.hiScore) this.save.hiScore = this.world.score;
+    tickBlink(this.frogBlink, dt);
 
     for (const [slot, t] of this.homeAnims) {
       const next = t + dt;
@@ -106,7 +109,7 @@ export class PlayScene implements Scene {
       if (lane) drawLaneMovers(r, lane, world.elapsed);
     }
 
-    drawFrog(r, world.frog, world.elapsed);
+    drawFrog(r, world.frog, world.elapsed, this.frogBlink.blinking);
 
     drawHud(r, {
       score: world.score,

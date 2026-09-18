@@ -217,3 +217,113 @@ clean with no changes needed beyond the art pass itself. No git commit made, per
 - Score popups, particles, screen shake, hit-stop are explicitly M4 and were not touched.
 - Gamepad/touch input were not exercised in this milestone (no art changes there); unchanged from
   M0-M2.
+
+## Fix-up: design review pass
+
+Six items from Fable's M3 art review, against the ART_BIBLE.md sections the doc says now have the
+exact rules for each (1, 2, 4, 5). Not committed - Fable reviews and commits.
+
+1. **Logo text and DPR crispness (`src/scenes/title.ts`).** `LOGO_TEXT` dropped its trailing
+   period ("RIBBIT RUSH"), `LOGO_FONT_SIZE` went 62 -> 72px, and the extruded bottom edge went
+   4px -> 5px, all per bible section 1. `buildLogoCanvas` now takes `dpr`, sizes the backing
+   canvas at `width * dpr` x `height * dpr`, and does `ctx.scale(dpr, dpr)` before drawing at
+   logical size - the bug it fixes: the old canvas was raster-sized at CSS/logical px only, so on
+   a `dpr > 1` screen the browser had to upscale a low-res source into the drawImage destination
+   rect (which *is* dpr-scaled, via the main renderer's own `ctx.setTransform`), blurring the
+   logo. `buildLogoCanvas` also now measures the actual glyph widths at 72px to size its own
+   canvas (rather than a fixed 600x130 that was tuned for the old 62px/with-period string), and
+   returns the first glyph's centre-x/top-y in the canvas's own coordinate space so the title
+   scene can position the new hero-behind-the-letter frog (next item) without re-deriving the
+   text layout.
+
+2. **Hero frog rasterisation (`src/render/sprites.ts`, `src/render/renderer.ts`,
+   `src/scenes/title.ts`).** Added `spriteAt(name, scale)` / `preloadSpriteAt(name, scale)` to
+   `sprites.ts`: `rasterize()` (the existing atlas rasteriser) now takes an optional `scale`
+   parameter, so a scaled entry is rasterised straight from the SVG at `TILE * scale * dpr` px per
+   tile and cached by `` `${name}@${scale}` ``, same as the 1x atlas but never upscaled from it.
+   `preloadSpriteAt` is async (kicks off rasterisation, returns a promise); `spriteAt` is the
+   synchronous read used at render time, returning `undefined` on a cache miss while it warms up.
+   `renderer.ts` factors the actual `ctx.drawImage` transform logic out of `Renderer.sprite` into
+   a standalone `drawSpriteImage(ctx, img, x, y, opts)` so callers holding a `SpriteImage` directly
+   (not going through the by-name atlas) can use the same draw path - `Renderer.sprite` is now a
+   thin `atlas.get(name)` + `drawSpriteImage` call, behaviourally unchanged.
+   `TitleScene`'s constructor calls `preloadSpriteAt('frog-idle', 3)` and
+   `preloadSpriteAt('frog-idle', 1.5)` so both are warm before the first `render()`. The 3x hero
+   below the logo now draws from `spriteAt('frog-idle', 3)` instead of `r.sprite('frog-idle', ...,
+   { sx: 3, sy: 3 })` (which scaled up the 1x raster and blurred); the small breathing wobble is
+   still a `{ sx: breath, sy: breath }` transform on top of the pre-rasterised 3x image, and the
+   blink overlay's ellipse geometry (drawn in the frog's local 1x-unit space, then
+   `ctx.scale(heroScale * breath, ...)`'d into place) is untouched. A new 1.5x frog is drawn from
+   `spriteAt('frog-idle', 1.5)` *before* the logo canvas is blitted, positioned via
+   `logo.firstGlyphCenterX`/`firstGlyphTopY` so its eyes and the top of its head show above the
+   first "R" and the rest is covered when the logo draws on top of it - bible section 1's "hero
+   frog... sits behind the first R". The old 0.5x frog that was drawn *after* (on top of) the logo
+   at a fixed `logoX + 22` offset - which both floated at the wrong depth (fully on top, not
+   peeking from behind) and had drifted to the river band's left edge once the logo was re-sized
+   for 72px text - is removed.
+
+3. **Motorbike (`assets/sprites/motorbike.svg`).** Redone from scratch to the bible's literal
+   spec: two dark (`#22242A`) wheel ellipses ~10x6px each, front at the right (x=35.5) and rear at
+   the left (x=12.5), both on the bike's horizontal centreline (`cy=24`) so they sit in line along
+   the direction of travel; a 29px-wide body between them (`x=9.5` to `x=38.5`), made *shorter*
+   than the wheels so each one pokes past its top and bottom edge, same convention as the wheels
+   in `car.svg`; a 9px-round helmet (`r=4.5`) in the rider colour `#E8474B`, centred at x=27 -
+   forward of the bike's x=24 centre - with two smaller rider-coloured ellipses behind it at
+   x=16.5/21 standing in for shoulders; and a 1px-radius headlight dot at the front (`cx=38`). The
+   previous file had the wheels sized/positioned close to this already, but the "helmet" was
+   filled ink-black (`#1B2A1D`, not the rider colour the bible specifies) and the rider was a
+   single large torso ellipse with no separate shoulder shapes - both fixed. Verified by opening
+   the SVG directly and by a cropped-viewBox zoom on the rear wheel to confirm it visibly pokes
+   past the body on both edges (the first pass at matching the "10x6" wheel size literally, before
+   shrinking the body to match, had the body rect fully covering the wheels - worth flagging in
+   case a future template sprite hits the same trap: a wheel's *nominal* size only reads as a wheel
+   once the frame drawn over it is shorter than it).
+
+4. **Crocodile in a home slot (`assets/sprites/croc-slot.svg`, new; `src/render/draw/background.ts`).**
+   Added a dedicated 1x1 `croc-slot.svg`: two rounded rects (upper and lower jaw, each with a
+   darker rim + lighter top-face layer, matching every other sprite's shading convention) stacked
+   with a `#3B1414` dark-mouth rect between them, two eye bumps on the upper jaw, and two
+   interlocking white zigzag polylines (upper teeth hanging down, lower teeth pointing up) drawn
+   last so they read against the dark interior - "open jaws seen from above pointing down toward
+   the player, filling the slot" per bible section 4. Every coordinate stays within `x: [4, 44]`,
+   `y: [2, 46]` of the 48x48 viewBox, so it never draws outside its own tile. `drawHomeSlots` in
+   `background.ts` now draws `'croc-slot'` for a `'croc'`-occupied home slot instead of `'croc'`
+   (the 2x1 lane-mover template) - `croc.svg` itself is untouched and stays reserved for M6's
+   river/road lane use, per the milestone note. This removes the M3 report's own documented
+   "known limitation": `croc.svg` is 96px wide centred on a 48px slot, so in home columns 0 and 12
+   (the leftmost/rightmost of `HOME_COLS`) half the sprite drew off the canvas edge entirely;
+   verified fixed by forcing `homes[0]` and `homes[4]` (column 12) to `'croc'` via the dev hook and
+   screenshotting both edge slots fully contained.
+
+5. **Blink timing (`src/render/anim.ts`, `src/scenes/title.ts`, `src/scenes/play.ts`).** The old
+   `frogBlink(elapsed)` was a pure function wrapping a fixed 4s period - deterministic, and
+   explicitly a stand-in ("no stated source of variation") for the bible's actual "uniform random
+   interval, re-rolled after each blink." A re-rolled random interval can't be recovered from a
+   pure function of an elapsed clock alone, so this needed real state: `anim.ts` now exports
+   `BlinkState` (`{ timer, blinking, blinkT }`), `createBlinkState(rng?)` (rolls the first interval
+   uniformly in [3, 5)), and `tickBlink(state, dt, rng?)`, which counts `timer` down while idle,
+   flips to `blinking` for `BLINK_DURATION_S` (100ms, unchanged) once it elapses, and re-rolls a
+   fresh uniform [3, 5) interval the instant the blink ends. `rng` defaults to `Math.random` -
+   blink timing has no gameplay effect, so it isn't drawn from the seeded `core/rng.ts` stream
+   `World` uses for hazard rolls. Both places that render a blinking frog now own a `BlinkState`
+   and tick it once per fixed `update(dt)` step (not per `render()` call, which can run more than
+   once per tick under the loop's alpha interpolation): `PlayScene.frogBlink` for the play frog,
+   `TitleScene.heroBlink` for the title hero. `drawFrog` (`render/draw/entities.ts`) no longer
+   computes blink itself; it takes a `blinking: boolean` parameter from the caller instead.
+
+6. **HUD lives cap (`src/render/draw/hud.ts`).** `drawHud` now draws `Math.min(hud.lives, 5)`
+   frog-icon lives, and when `hud.lives > 5` appends `` `x${hud.lives}` `` in the same cream/ink
+   HUD text style right after the fifth icon - e.g. 5 icons + "x99" for the reviewer's dev-console
+   `lives = 99`, or 5 icons + "x7" after enough extra-life score thresholds in normal play. Verified
+   both the normal 3-life HUD (no "xN", unchanged look) and the `lives = 99` case via the dev hook.
+
+### Verification
+
+`npm run typecheck`, `npm run lint`, `npm test` (6 files, 51 tests), and `npm run build` all pass
+clean. Screenshots: `docs/screens/m3fix-title.png` (logo + both hero frogs) and
+`docs/screens/m3fix-play.png` (a level 1 frame with `homes[0]` forced to `'croc'` via
+`window.__rr.world.homes[0] = 'croc'`, showing the new `croc-slot` sprite fully contained in the
+leftmost home slot). Additionally spot-checked interactively (not saved as a deliverable
+screenshot): both edge home slots (`homes[0]` and `homes[4]`, i.e. columns 0 and 12) with a croc
+each, confirming neither bleeds off the canvas, and `world.lives = 99` to confirm the HUD's
+5-icons-plus-"x99" overflow rendering.
