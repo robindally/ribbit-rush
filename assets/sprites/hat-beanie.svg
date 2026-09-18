@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Frost skin hat overlay (docs/specs/M9-endless-skins.md section 2): a knitted beanie capping
+       the head, drawn at the frog's own transform so it rotates with the frog. All art stays
+       within the 0..48 viewBox (no negative coordinates - they'd clip). -->
+  <g fill="#7CC7FF">
+    <path d="M8 15 Q8 1 24 1 Q40 1 40 15 L40 17 Q24 11 8 17 Z"/>
+  </g>
+  <g stroke="#FFFFFF" stroke-width="1.2" stroke-linecap="round" opacity="0.55">
+    <path d="M11 12 Q24 6 37 12" fill="none"/>
+    <path d="M9.5 15.5 Q24 9 38.5 15.5" fill="none"/>
+  </g>
+  <circle cx="24" cy="3" r="3" fill="#FFFFFF"/>
+</svg>

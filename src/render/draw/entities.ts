@@ -20,6 +20,7 @@ import {
   type ScaleXY,
 } from '../anim';
 import type { Renderer } from '../renderer';
+import { currentHatSprite } from '../skinSprites';
 import { fogEntityAlpha } from './weather';
 
 // Frog faces up in its SVG (ARCHITECTURE.md section 11 / ART_BIBLE.md section 2); rotate for the
@@ -295,6 +296,14 @@ export function drawFrog(r: Renderer, frog: Frog, elapsed: number, blinking: boo
     sx: scale.scaleX,
     sy: scale.scaleY,
   });
+
+  // M9: the current skin's hat overlay (headband/crown/beanie, docs/specs/M9-endless-skins.md
+  // section 2) - drawn at the exact same transform as the frog sprite above, so it rotates with
+  // the frog and rides its hop squash/stretch, needing no hat-specific positioning logic.
+  const hatSprite = currentHatSprite();
+  if (hatSprite) {
+    r.sprite(hatSprite, cx, y, { rot, sx: scale.scaleX, sy: scale.scaleY });
+  }
 
   if (!hopping && blinking) {
     drawBlinkOverlay(r, cx, y, rot, scale);

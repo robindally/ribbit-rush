@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { World } from '../src/game/world';
+import { createEndlessWorld, World } from '../src/game/world';
 import { gameEvents } from '../src/core/events';
 import { START_LIVES } from '../src/game/scoring';
-import { HOME_ROW, MEDIAN_ROW } from '../src/game/constants';
+import { endlessDifficultyForCrossing } from '../src/game/endless';
+import { HOME_ROW, MEDIAN_ROW, START_ROW } from '../src/game/constants';
 import type { Frog, LaneDef, LevelDef } from '../src/game/types';
 
 /**
@@ -614,5 +615,67 @@ describe('M7 lady frog', () => {
 
     expect(world.carryingLadyFrog).toBe(false);
     expect(events.some((e) => e.label === '+500 LADY FROG')).toBe(true);
+  });
+});
+
+// --- Endless mode (M9: docs/specs/M9-endless-skins.md section 1) ---
+
+describe('Endless mode', () => {
+  it('createEndlessWorld starts at crossing 1, difficulty 1.2, mode endless', () => {
+    const world = createEndlessWorld(1.2, 42);
+    expect(world.mode).toBe('endless');
+    expect(world.levelNumber).toBe(1);
+    expect(world.difficulty).toBeCloseTo(1.2);
+    expect(world.level.world).toBeGreaterThanOrEqual(1);
+    expect(world.level.world).toBeLessThanOrEqual(5);
+  });
+
+  it('a single home landing ends the crossing immediately: homes never fill, frog resets to the '
+    + 'start, difficulty rises, and the crossing awards 100 * streak multiplier', () => {
+    const level = levelWithLanes([]); // no traffic - only the home-landing wiring is under test
+    const world = new World(level, 1, 1, 'endless');
+    placeFrogIdleAt(world.frog, 3, HOME_ROW + 1); // column 3 is a home slot
+    world.frog.facing = 'up';
+
+    const scoreLabels: (string | undefined)[] = [];
+    const onScore = (e: { label?: string }): void => {
+      scoreLabels.push(e.label);
+    };
+    gameEvents.on('score', onScore);
+    world.queueHop('up');
+    const dt = 1 / 60;
+    for (let i = 0; i < 7; i++) world.update(dt);
+    gameEvents.off('score', onScore);
+
+    expect(world.frog.state).toBe('idle');
+    expect(world.mode).toBe('endless');
+    // A single landing already generated crossing 2, not "filled" any of the 5 home slots.
+    expect(world.levelNumber).toBe(2);
+    expect(world.difficulty).toBeCloseTo(endlessDifficultyForCrossing(2));
+    expect(world.homes.every((h) => h === null)).toBe(true);
+    // The frog is back at the start bank, not wherever it landed.
+    expect(world.frog.row).toBe(START_ROW);
+    expect(world.frog.x).toBe(6);
+    expect(scoreLabels).toContain('+100 CROSSING');
+    expect(world.gameOver).toBe(false);
+  });
+
+  it('never emits levelClear (that is a campaign-only concept)', () => {
+    const level = levelWithLanes([]);
+    const world = new World(level, 1, 1, 'endless');
+    placeFrogIdleAt(world.frog, 0, HOME_ROW + 1);
+    world.frog.facing = 'up';
+
+    let clearedFired = false;
+    const onClear = (): void => {
+      clearedFired = true;
+    };
+    gameEvents.on('levelClear', onClear);
+    world.queueHop('up');
+    const dt = 1 / 60;
+    for (let i = 0; i < 7; i++) world.update(dt);
+    gameEvents.off('levelClear', onClear);
+
+    expect(clearedFired).toBe(false);
   });
 });

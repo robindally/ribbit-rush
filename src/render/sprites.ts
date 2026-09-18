@@ -43,7 +43,11 @@ function viewBoxTiles(svgSource: string): { tilesW: number; tilesH: number } {
   return { tilesW: w / TILE, tilesH: h / TILE };
 }
 
-async function rasterize(svgSource: string, dpr: number, scale = 1): Promise<SpriteImage> {
+/** `alpha` bakes a fixed transparency into the rasterised pixels themselves (M9: the Ghost skin's
+ * "drawn at 70% alpha", docs/specs/M9-endless-skins.md section 2) - every draw call site that
+ * already reads this sprite by name (`Renderer.sprite`, `render/sprites.ts`'s own `spriteAt`)
+ * needs no change at all, since the transparency is already part of the pixels. */
+async function rasterize(svgSource: string, dpr: number, scale = 1, alpha = 1): Promise<SpriteImage> {
   const { tilesW, tilesH } = viewBoxTiles(svgSource);
   const logicalW = tilesW * TILE * scale;
   const logicalH = tilesH * TILE * scale;
@@ -66,6 +70,7 @@ async function rasterize(svgSource: string, dpr: number, scale = 1): Promise<Spr
     if (ctx) {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
+      ctx.globalAlpha = alpha;
       ctx.drawImage(img, 0, 0, pxW, pxH);
     }
     return { canvas, width: logicalW, height: logicalH };
@@ -74,27 +79,38 @@ async function rasterize(svgSource: string, dpr: number, scale = 1): Promise<Spr
   }
 }
 
+// Module-scope (not a `loadSprites()`-local variable) so M9's skin recolouring can overwrite an
+// entry after boot (`setAtlasSprite` below) - every existing `r.sprite('frog-idle', ...)` call
+// site keeps working unchanged, it just starts reading back whichever skin was last applied.
+const mainAtlas = new Map<string, SpriteImage>();
 let loaded: SpriteAtlas | null = null;
 
 export async function loadSprites(): Promise<SpriteAtlas> {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
   const entries = Object.entries(rawSprites);
-  const atlas = new Map<string, SpriteImage>();
 
   await Promise.all(
     entries.map(async ([path, source]) => {
       const name = nameFromPath(path);
-      atlas.set(name, await rasterize(source, dpr));
+      mainAtlas.set(name, await rasterize(source, dpr));
     }),
   );
 
   const spriteAtlas: SpriteAtlas = {
     get(name: string) {
-      return atlas.get(name);
+      return mainAtlas.get(name);
     },
   };
   loaded = spriteAtlas;
   return spriteAtlas;
+}
+
+/** M9: overwrites the main 1x atlas entry for `name` (e.g. after `game/skins.ts`'s
+ * `recolorFrogSvg` + a fresh rasterise) - every existing lookup (`Renderer.sprite`, `draw/hud.ts`'s
+ * lives icons, `draw/entities.ts`'s `drawFrog`) reads through `atlas.get(name)`, so this is enough
+ * to reskin the whole game with zero changes at any of those call sites. */
+export function setAtlasSprite(name: string, img: SpriteImage): void {
+  mainAtlas.set(name, img);
 }
 
 /**
@@ -123,6 +139,14 @@ function rawSource(name: string): string | undefined {
     byName = new Map(Object.entries(rawSprites).map(([path, source]) => [nameFromPath(path), source]));
   }
   return byName.get(name);
+}
+
+/** M9: public access to a sprite's raw SVG source text, for `render/skinSprites.ts` to recolour
+ * (`game/skins.ts`'s `recolorFrogSvg`) before rasterising - the same source `loadSprites`/
+ * `preloadSpriteAt` already read, just exposed for a caller that needs the text itself rather than
+ * an already-rasterised `SpriteImage`. */
+export function getRawSpriteSource(name: string): string | undefined {
+  return rawSource(name);
 }
 
 const scaledCache = new Map<string, SpriteImage>();
@@ -163,4 +187,21 @@ export function spriteAt(name: string, scale: number): SpriteImage | undefined {
   if (cached) return cached;
   void preloadSpriteAt(name, scale);
   return undefined;
+}
+
+/** M9: overwrites the `spriteAt(name, scale)` cache entry directly (e.g. after recolouring for a
+ * skin change) - used for the two scales the Title actually draws `frog-idle` at above 1x (the
+ * hero and the logo-peek frog, `scenes/title.ts`), so they follow the selected skin the same way
+ * the main atlas's 1x entry does via `setAtlasSprite`. */
+export function setScaledSprite(name: string, scale: number, img: SpriteImage): void {
+  scaledCache.set(`${name}@${scale}`, img);
+}
+
+/** M9: rasterises arbitrary SVG source text (already recoloured for a skin, or not) at `scale`,
+ * using the current device pixel ratio - the same rasteriser `loadSprites`/`preloadSpriteAt` use
+ * internally, exposed directly for `render/skinSprites.ts` since a recoloured skin's source isn't
+ * one of the eagerly-globbed `assets/sprites/*.svg` files. */
+export function rasterizeSvgSource(svgSource: string, scale = 1, alpha = 1): Promise<SpriteImage> {
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  return rasterize(svgSource, dpr, scale, alpha);
 }

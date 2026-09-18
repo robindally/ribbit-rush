@@ -6,17 +6,19 @@
 
 import type { Scene, SceneManager } from '../core/loop';
 import * as audio from '../core/audio';
-import type { LeaderboardEntry, SaveData } from '../core/save';
+import type { EndlessLeaderboardEntry, LeaderboardEntry, SaveData } from '../core/save';
 import {
+  insertEndlessLeaderboardEntry,
   insertLeaderboardEntry,
+  qualifiesForEndlessLeaderboard,
   qualifiesForLeaderboard,
-  recordBestLevel,
   writeSave,
 } from '../core/save';
 import * as transitions from '../fx/transitions';
 import type { RunStats } from '../game/scoring';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../game/constants';
 import { getWorldTheme } from '../game/themes';
+import type { SkinDef } from '../game/skins';
 import type { InputAction } from '../game/types';
 import { roundRect } from '../render/draw/background';
 import type { Renderer } from '../render/renderer';
@@ -86,12 +88,20 @@ export class GameOverScene implements Scene {
     private save: SaveData,
     private score: number,
     private stats: RunStats,
+    /** M9: present only for an Endless run's game over - `stats.levelReached` doubles as the
+     * crossing count there (`game/world.ts`'s own doc comment on `levelNumber`), so this is really
+     * just "which leaderboard, and what label to show" rather than new data. */
+    private crossingInfo?: { crossings: number },
+    /** M9: skins that became unlocked banking this run's final progress (`PlayScene.bankProgress`,
+     * called by the caller *before* this scene is constructed) - shown as a toast on the card. */
+    private newlyUnlockedSkins: SkinDef[] = [],
   ) {
-    if (score > this.save.hiScore) this.save.hiScore = score;
-    recordBestLevel(this.save, stats.levelReached);
-    writeSave(this.save);
-
-    this.qualifies = qualifiesForLeaderboard(this.save.leaderboard, score);
+    // Note: hiScore/bestLevel/lifetime skin-unlock stats are already banked and saved by
+    // `PlayScene.bankProgress()` before this scene is constructed (see `scenes/play.ts`'s
+    // `gameOver` handler) - this constructor only owns the leaderboard entry itself.
+    this.qualifies = this.crossingInfo
+      ? qualifiesForEndlessLeaderboard(this.save.endlessLeaderboard, this.crossingInfo.crossings, score)
+      : qualifiesForLeaderboard(this.save.leaderboard, score);
     this.nameEntryDone = !this.qualifies;
 
     const defaultName = (this.save.lastName || 'AAA')
@@ -232,14 +242,25 @@ export class GameOverScene implements Scene {
   private confirmName(): void {
     const name = this.letters.map(letterChar).join('');
     this.save.lastName = name;
-    const entry: LeaderboardEntry = {
-      name,
-      score: this.score,
-      world: this.stats.world,
-      level: this.stats.levelReached,
-      date: new Date().toISOString().slice(0, 10),
-    };
-    this.save.leaderboard = insertLeaderboardEntry(this.save.leaderboard, entry);
+    const date = new Date().toISOString().slice(0, 10);
+    if (this.crossingInfo) {
+      const entry: EndlessLeaderboardEntry = {
+        name,
+        crossings: this.crossingInfo.crossings,
+        score: this.score,
+        date,
+      };
+      this.save.endlessLeaderboard = insertEndlessLeaderboardEntry(this.save.endlessLeaderboard, entry);
+    } else {
+      const entry: LeaderboardEntry = {
+        name,
+        score: this.score,
+        world: this.stats.world,
+        level: this.stats.levelReached,
+        date,
+      };
+      this.save.leaderboard = insertLeaderboardEntry(this.save.leaderboard, entry);
+    }
     writeSave(this.save);
     this.nameEntryDone = true;
     this.detachNameEntryInput();
@@ -281,6 +302,7 @@ export class GameOverScene implements Scene {
     });
 
     this.renderStats(r, CANVAS_WIDTH / 2, y + h * 0.36);
+    this.renderUnlockToast(r, CANVAS_WIDTH / 2, y + h * 0.46);
 
     if (!this.nameEntryDone) {
       this.renderNameEntry(r, CANVAS_WIDTH / 2, y + h * 0.56);
@@ -323,7 +345,10 @@ export class GameOverScene implements Scene {
 
   private renderStats(r: Renderer, cx: number, y: number): void {
     const s = this.stats;
-    const line1 = `Level ${s.levelReached}  |  Homes ${s.homesFilled}  |  Power-ups ${s.powerupsCollected}`;
+    const progressLabel = this.crossingInfo
+      ? `Crossings ${this.crossingInfo.crossings}`
+      : `Level ${s.levelReached}`;
+    const line1 = `${progressLabel}  |  Homes ${s.homesFilled}  |  Power-ups ${s.powerupsCollected}`;
     const line2 = `Near-miss x${s.nearMisses} (best combo x${s.bestCombo})  |  Best streak x${s.bestMultiplier}`;
     const cause = topDeathCause(s.deathsByCause);
     const line3 = `Time played ${Math.round(s.timePlayedS)}s${cause ? `  |  Most deaths: ${cause}` : ''}`;
@@ -331,6 +356,20 @@ export class GameOverScene implements Scene {
     r.text(line1, cx, y, { size: 13, weight: 500, align: 'center', color: INK });
     r.text(line2, cx, y + 16, { size: 13, weight: 500, align: 'center', color: INK });
     r.text(line3, cx, y + 32, { size: 12, weight: 500, align: 'center', color: INK });
+  }
+
+  /** M9: "New skin unlocked" toast for anything `PlayScene.bankProgress()` found newly unlocked
+   * this run (docs/specs/M9-endless-skins.md section 2: "unlock toasts on those cards"). */
+  private renderUnlockToast(r: Renderer, cx: number, y: number): void {
+    if (this.newlyUnlockedSkins.length === 0) return;
+    const names = this.newlyUnlockedSkins.map((s) => s.name).join(', ');
+    r.text(`New skin unlocked: ${names}!`, cx, y, {
+      size: 13,
+      weight: 700,
+      align: 'center',
+      color: GOLD,
+      outline: INK,
+    });
   }
 
   private renderNameEntry(r: Renderer, cx: number, y: number): void {

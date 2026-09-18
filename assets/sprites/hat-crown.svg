@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Swamp King skin hat overlay (docs/specs/M9-endless-skins.md section 2): a small gold crown
+       perched above the head, drawn at the frog's own transform so it rotates with the frog. All
+       art stays within the 0..48 viewBox (no negative coordinates - they'd clip). -->
+  <g fill="#FFC83D">
+    <path d="M12 10 L14 4 L20 7 L24 0 L28 7 L34 4 L36 10 Z"/>
+    <rect x="12" y="8" width="24" height="4" rx="1.5"/>
+  </g>
+  <g fill="#FF4D4D">
+    <circle cx="24" cy="2" r="1.7"/>
+  </g>
+  <g fill="#3E9CE6">
+    <circle cx="17" cy="6" r="1.3"/>
+    <circle cx="31" cy="6" r="1.3"/>
+  </g>
+</svg>

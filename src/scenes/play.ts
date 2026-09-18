@@ -24,9 +24,10 @@ import {
   ROAD_ROWS,
   TILE,
 } from '../game/constants';
-import { getWorldTheme, type WorldTheme } from '../game/themes';
+import { blendWorldTheme, getWorldTheme, type WorldTheme } from '../game/themes';
 import { freezeLaneTimeScale, POWERUP_KINDS } from '../game/powerups';
-import { createCampaignWorld } from '../game/world';
+import { getSkin, unlockedSkinIds, unlockStatsFromSave, type SkinDef } from '../game/skins';
+import { createCampaignWorld, createEndlessWorld } from '../game/world';
 import type { World } from '../game/world';
 import type { Dir, InputAction, PowerupKind } from '../game/types';
 import type { Renderer } from '../render/renderer';
@@ -55,6 +56,9 @@ import { ResultsScene } from './results';
 // A home-landing animation stays visible (icon pulse + lily-pad ring, ART_BIBLE.md section 5) for
 // at most this long; entries older than this are pruned each frame.
 const HOME_ANIM_MAX_S = 0.5;
+// M9: Endless's own theme change (docs/specs/M9-endless-skins.md section 1: "a 1 s palette
+// crossfade").
+const CROSSFADE_S = 1;
 // Dev-only "L" then up to two digits level jump (docs/specs/M6-worlds.md section 6). If the
 // second digit doesn't arrive within this window, the single digit typed so far commits.
 const LEVEL_JUMP_COMMIT_MS = 900;
@@ -93,6 +97,16 @@ export class PlayScene implements Scene {
   private onLevelJumpKey: ((e: KeyboardEvent) => void) | null = null;
   private pendingResults: PendingResults | null = null;
   private lastOnScreenDpadSetting = false;
+  // --- M9 Endless: docs/specs/M9-endless-skins.md section 1 ---
+  // The crossfade fires whenever the *rendered* theme's world id changes while in Endless mode
+  // (every 5th crossing, `game/endless.ts`'s `endlessWorldForCrossing`) - `from` is the theme it
+  // fades away from, `t` counts up 0..1 over `CROSSFADE_S`. Null the rest of the time, including
+  // the whole of campaign mode (which already has its own Results-screen "next world" reveal and
+  // never needed a live in-canvas crossfade).
+  private crossfade: { from: WorldTheme; t: number } | null = null;
+  /** How much of this run's `RunStats.homesFilled` has already been folded into
+   * `save.lifetimeHomesFilled` - see `bankProgress()`. */
+  private lifetimeHomesBanked = 0;
   // M8 fix-up spec item 1: recomputed every `update()` tick (cheap - a couple of comparisons)
   // alongside the on-screen-d-pad-setting poll above, since both can flip the *set* of on-canvas
   // touch buttons `setupTouchButtons()` needs to (re)build.
@@ -136,8 +150,13 @@ export class PlayScene implements Scene {
   constructor(
     private scenes: SceneManager,
     private save: SaveData,
+    /** M9: present only for an Endless run (`scenes/endlessStart.ts`, `window.__rr.endless.start`)
+     * - absent, this is an ordinary campaign run, unchanged from pre-M9. */
+    private endlessOpts?: { startDifficulty: number; seed: number },
   ) {
-    this.world = createCampaignWorld(1, Date.now());
+    this.world = endlessOpts
+      ? createEndlessWorld(endlessOpts.startDifficulty, endlessOpts.seed)
+      : createCampaignWorld(1, Date.now());
     this.staticLayer = this.buildStaticLayerForCurrentLevel();
     particles.setPalette(getWorldTheme(this.world.level.world).palette);
     this.lastOnScreenDpadSetting = this.save.settings.onScreenDpad;
@@ -186,8 +205,23 @@ export class PlayScene implements Scene {
       if (e.type === 'gameOver') {
         const frog = this.world.frog;
         const stats = this.world.getRunStats();
+        // M9: banks lifetime skin-unlock progress (and, for campaign, bestLevel/hiScore) before
+        // the card that shows the unlock toast is even constructed - see `bankProgress()`.
+        const newlyUnlocked = this.bankProgress();
+        const crossingInfo =
+          this.world.mode === 'endless' ? { crossings: this.world.levelNumber } : undefined;
         transitions.play(
-          () => this.scenes.replace(new GameOverScene(this.scenes, this.save, e.score, stats)),
+          () =>
+            this.scenes.replace(
+              new GameOverScene(
+                this.scenes,
+                this.save,
+                e.score,
+                stats,
+                crossingInfo,
+                newlyUnlocked,
+              ),
+            ),
           (frog.x + 0.5) * TILE,
           frog.row * TILE + TILE / 2,
         );
@@ -226,11 +260,15 @@ export class PlayScene implements Scene {
     this.setupTouchButtons();
     // Show the level intro card immediately (docs/specs/M6-worlds.md section 7) rather than
     // waiting a frame for `update()` to notice the level number - avoids a one-frame flash of
-    // interactive play before the card appears.
+    // interactive play before the card appears. M9: Endless has no "level" to introduce - the
+    // Endless start card (`scenes/endlessStart.ts`) already served that role before this scene
+    // ever existed, so it drops straight into the first crossing instead.
     this.introShownForLevel = this.world.levelNumber;
-    this.scenes.push(
-      new LevelIntroScene(this.scenes, this, this.world.level, this.world.levelNumber),
-    );
+    if (this.world.mode === 'campaign') {
+      this.scenes.push(
+        new LevelIntroScene(this.scenes, this, this.world.level, this.world.levelNumber),
+      );
+    }
   }
 
   exit(): void {
@@ -247,10 +285,36 @@ export class PlayScene implements Scene {
     }
     this.touchOverlay?.unmount();
     this.touchOverlay = null;
-    // The run's furthest level reached, for Endless's lock (M8 spec section 1) - recorded here
-    // (not only on Game Over) so quitting to Title mid-run via Pause still counts it.
-    recordBestLevel(this.save, this.world.levelNumber);
+    // The run's furthest level reached, for Endless's lock (M8 spec section 1), plus M9's
+    // lifetime skin-unlock stats - banked here (not only on Game Over/Results) so quitting to
+    // Title mid-run via Pause still counts progress. No card is showing at this point, so the
+    // newly-unlocked list (if any) is simply discarded.
+    this.bankProgress();
+  }
+
+  /** M9: folds this run's progress so far into the save's lifetime skin-unlock stats
+   * (`game/skins.ts`), plus (campaign only) `bestLevel`/`hiScore` - called at every checkpoint
+   * that can end or pause a run (Results, Game Over, and here on exit/quit), always with the same
+   * "add only what hasn't already been counted" accounting so no checkpoint double-counts.
+   * Returns whichever skins just became unlocked as a result, for the caller to toast. */
+  bankProgress(): SkinDef[] {
+    const before = new Set(unlockedSkinIds(unlockStatsFromSave(this.save)));
+
+    const stats = this.world.getRunStats();
+    const homesDelta = stats.homesFilled - this.lifetimeHomesBanked;
+    if (homesDelta > 0) {
+      this.save.lifetimeHomesFilled += homesDelta;
+      this.lifetimeHomesBanked = stats.homesFilled;
+    }
+    this.save.bestNearMissesInRun = Math.max(this.save.bestNearMissesInRun, stats.nearMisses);
+    // `World.levelNumber` doubles as the crossing counter in Endless mode (see `game/world.ts`'s
+    // own doc comment) - recording it as a campaign "best level" would be nonsense there.
+    if (this.world.mode === 'campaign') recordBestLevel(this.save, this.world.levelNumber);
+    if (this.world.score > this.save.hiScore) this.save.hiScore = this.world.score;
     writeSave(this.save);
+
+    const after = unlockedSkinIds(unlockStatsFromSave(this.save));
+    return after.filter((id) => !before.has(id)).map((id) => getSkin(id));
   }
 
   /** Reloads the current level from scratch (fresh homes, fresh frog/timer), keeping score and
@@ -411,18 +475,30 @@ export class PlayScene implements Scene {
     if (this.world.level.world !== this.lastMusicWorld) {
       // Crossfades music the instant the level's world changes (docs/specs/M5-audio.md
       // acceptance #3; M6 is the first milestone where this actually fires from real gameplay).
+      // M9: in Endless mode this is also the trigger for the 1s in-canvas palette crossfade
+      // (docs/specs/M9-endless-skins.md section 1) - starting it here, not from a dedicated event,
+      // means it fires from the exact same "world id changed" condition the music already uses,
+      // so the two can never drift out of sync with each other.
+      if (this.world.mode === 'endless') {
+        this.crossfade = { from: getWorldTheme(this.lastMusicWorld ?? this.world.level.world), t: 0 };
+      }
       this.lastMusicWorld = this.world.level.world;
       music.play(this.world.level.world);
     }
+    if (this.crossfade) {
+      this.crossfade.t += dt;
+      if (this.crossfade.t >= CROSSFADE_S) this.crossfade = null;
+    }
 
-    if (this.world.levelNumber !== this.introShownForLevel) {
+    if (this.world.mode === 'campaign' && this.world.levelNumber !== this.introShownForLevel) {
       // A new level started this tick (level clear, or a dev jump) - checked right after
       // `world.update()` so the level number is already current, still inside this same
       // PlayScene.update() call (pushing a scene takes effect for the *next* frame's dispatch,
       // not re-entrantly). A real level clear shows the Results screen first (M8 spec section 1 -
       // time bonus count-up, homes lighting, world-change reveal); it pushes the usual
       // LevelIntroScene itself once dismissed. A dev level jump has no "clear" to celebrate, so
-      // it goes straight to the intro card as before.
+      // it goes straight to the intro card as before. M9: Endless never reaches this branch at
+      // all (guarded above) - a crossing's "next" is immediate, with nothing to introduce.
       this.introShownForLevel = this.world.levelNumber;
       if (this.pendingResults) {
         const pr = this.pendingResults;
@@ -475,10 +551,18 @@ export class PlayScene implements Scene {
 
   render(r: Renderer, alpha: number): void {
     const world = this.world;
-    if (this.staticLayerLevel !== world.levelNumber) {
+    // M9: while a palette crossfade is active, blend live and rebuild the static layer's colours
+    // every frame instead of only on a level/crossing change - a rare (every 5th crossing), short
+    // (1s) cost, and the only way the baked-in static layer (grass/road/hedge fills, not the
+    // animated water/lighting drawn live) actually crossfades rather than snapping instantly.
+    const theme = this.crossfade
+      ? blendWorldTheme(this.crossfade.from, getWorldTheme(world.level.world), this.crossfade.t / CROSSFADE_S)
+      : getWorldTheme(world.level.world);
+    if (this.crossfade) {
+      this.staticLayer = buildStaticLayer(theme, world.level, world.levelNumber);
+    } else if (this.staticLayerLevel !== world.levelNumber) {
       this.staticLayer = this.buildStaticLayerForCurrentLevel();
     }
-    const theme = getWorldTheme(world.level.world);
     setPageVignette(theme.palette.accentA);
 
     r.ctx.fillStyle = '#0c0d1a';
@@ -543,6 +627,9 @@ export class PlayScene implements Scene {
       elapsed: world.elapsed,
       multiplier: world.streak.multiplier,
       multiplierPulseT: this.multiplierPulseT,
+      mode: world.mode,
+      crossing: world.levelNumber,
+      difficulty: world.difficulty,
     });
 
     for (const b of this.touchButtons) {

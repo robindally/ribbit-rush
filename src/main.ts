@@ -9,13 +9,16 @@ import * as audio from './core/audio';
 import * as music from './audio/music';
 import { attachInput, setKeyBindings } from './core/input';
 import { startLoop, Scenes } from './core/loop';
-import { loadSave } from './core/save';
+import { loadSave, writeSave } from './core/save';
 import { setReduceMotion as setHitstopReduceMotion } from './fx/hitstop';
 import { setReduceMotion as setShakeReduceMotion } from './fx/shake';
 import { setReduceMotion as setTransitionsReduceMotion } from './fx/transitions';
+import { SKINS } from './game/skins';
 import { createRenderer } from './render/renderer';
+import { applySkin } from './render/skinSprites';
 import { loadSprites } from './render/sprites';
 import { getActiveFocusManager } from './render/ui';
+import { PlayScene } from './scenes/play';
 import { TitleScene } from './scenes/title';
 
 async function boot(): Promise<void> {
@@ -46,6 +49,18 @@ async function boot(): Promise<void> {
   // M5-audio.md). Scenes call `music.play`/`stop` directly (see scenes/title.ts, scenes/play.ts),
   // the same way M4's fx/transitions.ts is called directly by scenes for presentation.
   audio.init(save);
+
+  // M9: recolours the frog sprites to whichever skin was last selected (docs/specs/
+  // M9-endless-skins.md section 2: "selection persists in save") *before* the Title's own first
+  // render - a no-op for the default 'classic' skin (`game/skins.ts`'s `recolorFrogSvg` short-
+  // circuits it), so this costs nothing for the common case.
+  await applySkin(save.selectedSkin);
+
+  attachInput(canvas);
+
+  const scenes = new Scenes();
+  scenes.push(new TitleScene(scenes, save));
+
   if (import.meta.env.DEV) {
     const w = window as unknown as { __rr?: Record<string, unknown> };
     // `devHook()` objects use live getters (stats, started, playing, ...) so they read fresh
@@ -65,13 +80,42 @@ async function boot(): Promise<void> {
           return getActiveFocusManager();
         },
       },
+      // M9 spec: "add window.__rr.endless (start(d), and the current d)" - `start` jumps straight
+      // into a fresh Endless run at difficulty `d` from any scene (Title, mid-game, Game Over...),
+      // the same way `jumpToLevel` already lets the reviewer force campaign state; `d` reads back
+      // whichever `World` is currently live via `window.__rr.world` (set by `PlayScene`'s own dev
+      // hook), so it's `null` outside of an active Endless run rather than stale.
+      endless: {
+        start: (d = 1.2) => {
+          scenes.replace(new PlayScene(scenes, save, { startDifficulty: d, seed: Date.now() }));
+        },
+        get d() {
+          const rr = (window as unknown as { __rr?: { world?: { mode?: string; difficulty?: number } } })
+            .__rr;
+          return rr?.world?.mode === 'endless' ? (rr.world.difficulty ?? null) : null;
+        },
+      },
+      // M9 spec: "add ... window.__rr.skins (unlockAll, select(name))" - `unlockAll` forces every
+      // lifetime stat a skin's unlock could ever check past its own threshold (never lowers one
+      // that's already higher); `select` both persists the choice and re-skins the live sprites
+      // immediately, the same call the Title's own picker makes.
+      skins: {
+        names: SKINS.map((s) => s.id),
+        unlockAll: () => {
+          save.bestLevel = Math.max(save.bestLevel, 15);
+          save.hiScore = Math.max(save.hiScore, 50000);
+          save.lifetimeHomesFilled = Math.max(save.lifetimeHomesFilled, 25);
+          save.bestNearMissesInRun = Math.max(save.bestNearMissesInRun, 15);
+          writeSave(save);
+        },
+        select: (name: string) => {
+          save.selectedSkin = name;
+          writeSave(save);
+          void applySkin(name);
+        },
+      },
     };
   }
-
-  attachInput(canvas);
-
-  const scenes = new Scenes();
-  scenes.push(new TitleScene(scenes, save));
 
   startLoop(scenes, renderer);
 }

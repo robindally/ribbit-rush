@@ -133,3 +133,30 @@ export const WORLD_THEMES: Record<1 | 2 | 3 | 4 | 5, WorldTheme> = {
 export function getWorldTheme(id: 1 | 2 | 3 | 4 | 5): WorldTheme {
   return WORLD_THEMES[id];
 }
+
+// --- Palette crossfade (M9: docs/specs/M9-endless-skins.md section 1 - "Theme cycles 1 to 5 every
+// 5 crossings with a 1 s palette crossfade") ---
+
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace('#', '');
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+function lerpHex(a: string, b: string, t: number): string {
+  const [ar, ag, ab] = hexToRgb(a);
+  const [br, bg, bb] = hexToRgb(b);
+  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+  return `#${c(ar + (br - ar) * t)}${c(ag + (bg - ag) * t)}${c(ab + (bb - ab) * t)}`.toUpperCase();
+}
+
+/** Blends every hex field of two palettes by `t` (0 = `a`, 1 = `b`) - `timeOfDay`/`weather`/`tint`
+ * snap to `b` immediately rather than interpolate (a rgba string tint and a discrete weather/
+ * time-of-day don't have a meaningful "halfway" value the way a colour channel does), so only the
+ * dominant, always-hex palette actually crossfades. */
+export function blendWorldTheme(a: WorldTheme, b: WorldTheme, t: number): WorldTheme {
+  const clamped = Math.max(0, Math.min(1, t));
+  const keys = Object.keys(a.palette) as (keyof WorldPalette)[];
+  const palette = {} as WorldPalette;
+  for (const k of keys) palette[k] = lerpHex(a.palette[k], b.palette[k], clamped);
+  return { ...b, palette };
+}

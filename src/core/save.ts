@@ -13,7 +13,16 @@ export interface LeaderboardEntry {
   date: string;
 }
 
-/** Top 10 by score (M7 spec section 4). */
+/** M9: Endless's own leaderboard (docs/specs/M9-endless-skins.md section 1: "Separate Endless
+ * leaderboard (top 10 by crossings, then score)"). */
+export interface EndlessLeaderboardEntry {
+  name: string;
+  crossings: number;
+  score: number;
+  date: string;
+}
+
+/** Top 10 by score (M7 spec section 4); Endless's own board reuses the same cap. */
 export const LEADERBOARD_MAX = 10;
 
 export interface SaveSettings {
@@ -45,11 +54,22 @@ export interface SaveData {
    * `isEndlessUnlocked` below). Not reset between runs, unlike `World.levelNumber`. */
   bestLevel: number;
   leaderboard: LeaderboardEntry[];
+  /** M9: Endless's own top-10 board (crossings then score), separate from the campaign one. */
+  endlessLeaderboard: EndlessLeaderboardEntry[];
   settings: SaveSettings;
   unlocks: string[];
   /** Last name typed into the arcade-style leaderboard entry (M7 spec section 4: "Default the
    * name to the last one used"). Empty string until the player has entered one. */
   lastName: string;
+  /** M9: the currently-selected frog skin id (`game/skins.ts`'s `SkinDef.id`); persists across
+   * sessions (docs/specs/M9-endless-skins.md section 2: "selection persists in save"). */
+  selectedSkin: string;
+  /** M9: cumulative home landings across every run ever (not reset per-run, unlike
+   * `RunStats.homesFilled`) - drives the Toad skin's "fill 25 homes total" unlock. */
+  lifetimeHomesFilled: number;
+  /** M9: the highest near-miss count reached in any single run ever - drives the Ghost skin's "15
+   * near-misses in one run" unlock (a *best*, unlike `lifetimeHomesFilled`'s running total). */
+  bestNearMissesInRun: number;
 }
 
 const SAVE_KEY = 'ribbit-rush.v1';
@@ -70,6 +90,7 @@ function defaultSave(): SaveData {
     hiScore: 0,
     bestLevel: 1,
     leaderboard: [],
+    endlessLeaderboard: [],
     settings: {
       master: 80,
       music: 70,
@@ -81,6 +102,9 @@ function defaultSave(): SaveData {
     },
     unlocks: [],
     lastName: '',
+    selectedSkin: 'classic',
+    lifetimeHomesFilled: 0,
+    bestNearMissesInRun: 0,
   };
 }
 
@@ -95,6 +119,9 @@ export function loadSave(): SaveData {
       hiScore: typeof parsed.hiScore === 'number' ? parsed.hiScore : fallback.hiScore,
       bestLevel: typeof parsed.bestLevel === 'number' ? parsed.bestLevel : fallback.bestLevel,
       leaderboard: Array.isArray(parsed.leaderboard) ? parsed.leaderboard : fallback.leaderboard,
+      endlessLeaderboard: Array.isArray(parsed.endlessLeaderboard)
+        ? parsed.endlessLeaderboard
+        : fallback.endlessLeaderboard,
       settings: {
         ...fallback.settings,
         ...parsedSettings,
@@ -105,6 +132,16 @@ export function loadSave(): SaveData {
       },
       unlocks: Array.isArray(parsed.unlocks) ? parsed.unlocks : fallback.unlocks,
       lastName: typeof parsed.lastName === 'string' ? parsed.lastName : fallback.lastName,
+      selectedSkin:
+        typeof parsed.selectedSkin === 'string' ? parsed.selectedSkin : fallback.selectedSkin,
+      lifetimeHomesFilled:
+        typeof parsed.lifetimeHomesFilled === 'number'
+          ? parsed.lifetimeHomesFilled
+          : fallback.lifetimeHomesFilled,
+      bestNearMissesInRun:
+        typeof parsed.bestNearMissesInRun === 'number'
+          ? parsed.bestNearMissesInRun
+          : fallback.bestNearMissesInRun,
     };
   } catch {
     return fallback;
@@ -151,6 +188,35 @@ export function insertLeaderboardEntry(
   max = LEADERBOARD_MAX,
 ): LeaderboardEntry[] {
   return [...entries, entry].sort((a, b) => b.score - a.score).slice(0, max);
+}
+
+// --- Endless leaderboard (M9: docs/specs/M9-endless-skins.md section 1) ---
+//
+// Mirrors the campaign leaderboard's own insert/qualify pair above, sorted by crossings first,
+// score as the tiebreaker (the spec's own "top 10 by crossings, then score").
+
+export function qualifiesForEndlessLeaderboard(
+  entries: readonly EndlessLeaderboardEntry[],
+  crossings: number,
+  score: number,
+  max = LEADERBOARD_MAX,
+): boolean {
+  if (entries.length < max) return true;
+  const lowest = entries.reduce(
+    (min, e) => (e.crossings < min.crossings || (e.crossings === min.crossings && e.score < min.score) ? e : min),
+    entries[0],
+  );
+  return crossings > lowest.crossings || (crossings === lowest.crossings && score > lowest.score);
+}
+
+export function insertEndlessLeaderboardEntry(
+  entries: readonly EndlessLeaderboardEntry[],
+  entry: EndlessLeaderboardEntry,
+  max = LEADERBOARD_MAX,
+): EndlessLeaderboardEntry[] {
+  return [...entries, entry]
+    .sort((a, b) => b.crossings - a.crossings || b.score - a.score)
+    .slice(0, max);
 }
 
 export function writeSave(data: SaveData): void {

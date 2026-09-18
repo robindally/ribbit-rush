@@ -26,6 +26,11 @@ import {
 } from './constants';
 import { killerHitType, platformAt, vehicleHits } from './collision';
 import {
+  endlessDifficultyForCrossing,
+  endlessWorldForCrossing,
+  makeEndlessCrossing,
+} from './endless';
+import {
   bufferHop,
   computeHopTarget,
   computeMegaHopTarget,
@@ -119,6 +124,18 @@ export class World {
   nearMissCount = 0;
   streak: StreakState = createStreakState();
 
+  // --- Endless mode (M9: docs/specs/M9-endless-skins.md section 1, docs/LEVELS.md "Endless") ---
+
+  /** 'campaign' unless built via `createEndlessWorld`. `levelNumber` above doubles as the current
+   * crossing number in endless mode (the HUD shows it as "CROSSING N" instead of a level name -
+   * `render/draw/hud.ts`) - reusing the same field keeps every existing "which attempt is this"
+   * bookkeeping (the static-layer cache key in `scenes/play.ts`, `RunStats.levelReached`) correct
+   * for both modes with no duplicate counter. */
+  mode: 'campaign' | 'endless' = 'campaign';
+  /** Endless-only: the current crossing's difficulty `d` (docs/LEVELS.md "Endless": starts at 1.2,
+   * +0.04 per crossing). Meaningless in campaign mode. */
+  difficulty = 1.2;
+
   // --- Power-ups and lady frog (M7: docs/specs/M7-powerups-scoring.md sections 1-2) ---
 
   /** The one power-up currently on the field, or null. Public so render/ can read its
@@ -137,6 +154,13 @@ export class World {
   freezeElapsed: number | null = null;
 
   private rng: Rng;
+  /** Endless-only: a dedicated RNG stream for crossing generation (`loadNextCrossing`), kept
+   * entirely separate from `rng` above (per-attempt home-hazard/power-up rolls) so the sequence of
+   * generated crossings depends only on how many crossings have been *completed* - never on how
+   * many attempts/deaths it took to get there - which is what makes the Daily seed option
+   * reproducible (`tests/endless.test.ts`'s "daily seed determinism" case tests the pure generator
+   * directly; this field is what keeps real gameplay matching that same guarantee). */
+  private crossingRng: Rng;
   private hopBuffer: HopBuffer = createHopBuffer();
   private crocState: HazardState | null = null;
   private flyState: HazardState | null = null;
@@ -158,11 +182,19 @@ export class World {
    * next lap can warn again (M6: docs/LEVELS.md "new mover and lane rules"). */
   private trainWarned = new Set<number>();
 
-  constructor(level: LevelDef, levelNumber = 1, seed = 1) {
+  constructor(
+    level: LevelDef,
+    levelNumber = 1,
+    seed = 1,
+    mode: 'campaign' | 'endless' = 'campaign',
+    crossingRng?: Rng,
+  ) {
+    this.mode = mode;
     this.level = level;
     this.lanes = level.lanes;
     this.levelNumber = levelNumber;
     this.rng = createRng(seed);
+    this.crossingRng = crossingRng ?? createRng(seed + 1);
     this.frog = createFrog();
     this.homes = HOME_COLS.map(() => null);
     this.timeLeft = level.timeLimit;
@@ -680,6 +712,17 @@ export class World {
     this.addScore(homeDelta, `+${homeDelta}`);
     gameEvents.emit({ type: 'home', slot, timeLeft: this.timeLeft, bonus: occupant === 'fly' });
 
+    if (this.mode === 'endless') {
+      // M9: "one crossing = one frog reaching any home slot; homes never fill in Endless" - unlike
+      // campaign, a single landing always ends the crossing immediately, at a bonus scaled by the
+      // *current* streak multiplier (docs/LEVELS.md "Endless": "Score: standard scoring plus 100
+      // per crossing times the current streak multiplier").
+      const crossingDelta = 100 * this.streak.multiplier;
+      this.addScore(crossingDelta, `+${crossingDelta} CROSSING`);
+      this.loadNextCrossing();
+      return;
+    }
+
     if (this.homes.every((h) => h === 'frog')) {
       const clearDelta = levelClearScore(); // not streak-multiplied (spec section 6)
       this.addScore(clearDelta, `+${clearDelta}`);
@@ -809,6 +852,20 @@ export class World {
     this.loadLevel(this.levelNumber + 1);
   }
 
+  /** Endless-only (M9): generates the next crossing at the next difficulty step/world theme and
+   * resets the frog to the start - mirrors `loadLevel` above almost exactly, just sourced from
+   * `game/endless.ts`'s generator instead of `game/level.ts`'s campaign tables. */
+  private loadNextCrossing(): void {
+    this.levelNumber += 1;
+    this.difficulty = endlessDifficultyForCrossing(this.levelNumber);
+    const worldId = endlessWorldForCrossing(this.levelNumber);
+    this.level = makeEndlessCrossing(this.difficulty, this.crossingRng, worldId);
+    this.lanes = this.level.lanes;
+    this.homes = HOME_COLS.map(() => null);
+    this.trainWarned.clear();
+    this.respawnFrogOnly();
+  }
+
   private loadLevel(n: number): void {
     this.levelNumber = n;
     this.level = getLevel(n);
@@ -858,4 +915,19 @@ export class World {
 /** Builds a World starting at campaign level `n`, generating it from `game/level.ts`'s tables. */
 export function createCampaignWorld(n: number, seed = 1): World {
   return new World(getLevel(n), n, seed);
+}
+
+/** Builds a World starting Endless mode at crossing 1, difficulty `startDifficulty` (docs/LEVELS.md
+ * "Endless": "Difficulty d starts at 1.2"). `seed` drives both the per-attempt RNG (home hazards -
+ * unused today, since Endless crossings are generated with `crocChance`/`flyChance` both 0 - and
+ * power-up/lady-frog rolls) and, independently, every crossing this run ever generates (`seed + 1`,
+ * `World`'s own `crossingRng`) - passing the same `seed` twice (e.g. the UTC date seed for a Daily
+ * run) reproduces an identical run end to end. */
+export function createEndlessWorld(startDifficulty = 1.2, seed = Date.now()): World {
+  const crossingRng = createRng(seed + 1);
+  const worldId = endlessWorldForCrossing(1);
+  const level = makeEndlessCrossing(startDifficulty, crossingRng, worldId);
+  const world = new World(level, 1, seed, 'endless', crossingRng);
+  world.difficulty = startDifficulty;
+  return world;
 }

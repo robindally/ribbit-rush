@@ -11,6 +11,7 @@ import type { Scene, SceneManager } from '../core/loop';
 import * as audio from '../core/audio';
 import * as transitions from '../fx/transitions';
 import { CANVAS_HEIGHT, CANVAS_WIDTH, TILE } from '../game/constants';
+import type { SkinDef } from '../game/skins';
 import { getWorldTheme, type WorldTheme } from '../game/themes';
 import type { InputAction } from '../game/types';
 import type { World } from '../game/world';
@@ -47,6 +48,9 @@ export class ResultsScene implements Scene {
   private worldChanged: boolean;
   private focus = new FocusManager();
   private nextRect: Rect = { x: 0, y: 0, w: 0, h: 0 };
+  /** M9: skins newly unlocked by clearing this level (docs/specs/M9-endless-skins.md section 2:
+   * "unlock toasts on those cards") - computed once in `enter()` via `PlayScene.bankProgress()`. */
+  private newlyUnlockedSkins: SkinDef[] = [];
 
   constructor(
     private scenes: SceneManager,
@@ -72,6 +76,12 @@ export class ResultsScene implements Scene {
     this.focus.focus('next');
     if (canvas instanceof HTMLCanvasElement) this.focus.attach(canvas);
     pushActiveFocusManager(this.focus);
+    // M9: unlock checks run at Results (docs/specs/M9-endless-skins.md section 2) - `bestLevel`
+    // is already the level just cleared's *next* level by this point (World.loadNextLevel already
+    // ran, synchronously, before this scene was even pushed - see scenes/play.ts's own doc comment
+    // on PendingResults), so a "clear world W" skin unlocks the instant its world's last level
+    // clears, not only at Game Over.
+    this.newlyUnlockedSkins = this.under.bankProgress();
   }
 
   exit(): void {
@@ -195,6 +205,16 @@ export class ResultsScene implements Scene {
       align: 'center',
       color: this.oldWorldTheme.palette.accentB,
     });
+
+    if (this.newlyUnlockedSkins.length > 0) {
+      const names = this.newlyUnlockedSkins.map((s) => s.name).join(', ');
+      r.text(`New skin unlocked: ${names}!`, CANVAS_WIDTH / 2, y + h - 78, {
+        size: 12,
+        weight: 700,
+        align: 'center',
+        color: this.oldWorldTheme.palette.accentB,
+      });
+    }
 
     if (this.worldChanged && this.phase !== 'counting') {
       const revealAlpha =

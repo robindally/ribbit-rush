@@ -7,12 +7,13 @@
 
 import type { Scene, SceneManager } from '../core/loop';
 import * as audio from '../core/audio';
-import { isEndlessUnlocked, type SaveData } from '../core/save';
+import { isEndlessUnlocked, writeSave, type SaveData } from '../core/save';
 import { createRng } from '../core/rng';
 import * as music from '../audio/music';
 import * as transitions from '../fx/transitions';
 import { CANVAS_HEIGHT, CANVAS_WIDTH, TILE } from '../game/constants';
 import { stepLane } from '../game/lanes';
+import { getSkin, isSkinUnlocked, recolorFrogSvg, SKINS, unlockStatsFromSave } from '../game/skins';
 import { getWorldTheme } from '../game/themes';
 import type { InputAction, LaneDef } from '../game/types';
 import { createBlinkState, frogIdleBreath, tickBlink, type BlinkState } from '../render/anim';
@@ -21,7 +22,14 @@ import { drawLaneMovers } from '../render/draw/entities';
 import { drawAudioHint } from '../render/draw/hud';
 import { drawWaterAnimated } from '../render/draw/water';
 import { drawSpriteImage, type Renderer } from '../render/renderer';
-import { preloadSpriteAt, spriteAt } from '../render/sprites';
+import {
+  getRawSpriteSource,
+  preloadSpriteAt,
+  rasterizeSvgSource,
+  spriteAt,
+  type SpriteImage,
+} from '../render/sprites';
+import { applySkin } from '../render/skinSprites';
 import {
   actionHint,
   drawButton,
@@ -31,6 +39,7 @@ import {
   setPageVignette,
   type Rect,
 } from '../render/ui';
+import { EndlessStartScene } from './endlessStart';
 import { HowToPlayScene } from './howToPlay';
 import { LeaderboardScene } from './leaderboard';
 import { PlayScene } from './play';
@@ -62,6 +71,12 @@ const SCREEN_BOTTOM_MARGIN_PX = 16;
 // scale oscillation is a further +-2%; folded in here as safety margin rather than recomputed
 // every frame, since 2% of the hero's own height is under 3px either way.
 const HERO_FEET_OFFSET_PX = HERO_SCALE * TILE * ((47 - 24) / 48) * 1.02;
+
+// M9: skin picker swatch (docs/specs/M9-endless-skins.md section 2: "a row of frog heads, locked
+// ones greyed with the unlock text").
+const SKIN_SWATCH_D = 30;
+const SKIN_SWATCH_GAP = 8;
+const SKIN_PREVIEW_SCALE = SKIN_SWATCH_D / TILE;
 
 interface LogoLayout {
   canvas: HTMLCanvasElement;
@@ -180,6 +195,9 @@ interface TitleLayout {
   buttonH: number;
   buttonGap: number;
   buttonX: number;
+  /** M9: the skin picker row's own y (docs/specs/M9-endless-skins.md section 2: "a row of frog
+   * heads"), sitting between the button stack and the hi-score text. */
+  skinPickerY: number;
   hiScoreY: number;
   hintY: number;
 }
@@ -203,8 +221,13 @@ function buildLayout(logoHeight: number): TitleLayout {
   // feet (heroBottomY below) on the logo/font metrics this actually measures at, i.e. overlapping.
   const heroBottomY = heroCy + HERO_FEET_OFFSET_PX;
   const contentH = 5 * buttonH + 4 * buttonGap; // the five-button stack's own height
-  const hiScoreOffset = 26; // hi-score sits this far below the stack
-  const hintOffset = 56; // the prompt hint sits this far below the stack
+  // M9: the skin picker row's own footprint, folded into hiScoreOffset/hintOffset below so the
+  // bottom-margin clamp (maxButtonsY) still reserves room for it without double-counting.
+  const skinPickerGap = 10;
+  const skinPickerH = SKIN_SWATCH_D + 4;
+  const pickerFootprint = skinPickerGap + skinPickerH;
+  const hiScoreOffset = 26 + pickerFootprint; // hi-score sits this far below the stack
+  const hintOffset = 56 + pickerFootprint; // the prompt hint sits this far below the stack
   const hintHalfHeight = 8; // ~half the 15px hint text's own line height
 
   const desiredButtonsY = heroBottomY + HERO_START_GAP_PX;
@@ -231,6 +254,7 @@ function buildLayout(logoHeight: number): TitleLayout {
     buttonH,
     buttonGap,
     buttonX: (CANVAS_WIDTH - buttonW) / 2,
+    skinPickerY: buttonsY + contentH + skinPickerGap,
     hiScoreY: buttonsY + contentH + hiScoreOffset,
     hintY: buttonsY + contentH + hintOffset,
   };
@@ -249,6 +273,10 @@ export class TitleScene implements Scene {
   private grassRng = createRng(1337);
   private toastText: string | null = null;
   private toastT = 0;
+  /** M9: one small recoloured `frog-idle` raster per skin, for the picker row - built once, async,
+   * in the constructor (see `loadSkinPreviews`); a swatch falls back to a flat colour disc for the
+   * frame or two before its own entry lands. */
+  private skinPreviews = new Map<string, SpriteImage>();
 
   constructor(
     private scenes: SceneManager,
@@ -261,6 +289,7 @@ export class TitleScene implements Scene {
     // rather than skipping a frame - see render/sprites.ts.
     void preloadSpriteAt('frog-idle', HERO_SCALE);
     void preloadSpriteAt('frog-idle', LOGO_FROG_SCALE);
+    void this.loadSkinPreviews();
 
     this.riverLane = {
       row: this.layout.riverY / TILE,
@@ -325,7 +354,7 @@ export class TitleScene implements Scene {
       kind: 'button',
       rect: rectAt(1),
       disabled: !unlocked,
-      onActivate: () => this.showToast('Endless mode: coming soon!'),
+      onActivate: () => this.scenes.push(new EndlessStartScene(this.scenes, this.save)),
     });
 
     this.focus.add({
@@ -348,6 +377,54 @@ export class TitleScene implements Scene {
       rect: rectAt(4),
       onActivate: () => this.scenes.push(new HowToPlayScene(this.scenes)),
     });
+
+    // M9: skin picker row (docs/specs/M9-endless-skins.md section 2) - one control per skin, laid
+    // out centred under the button stack; a locked swatch shows its unlock hint as a toast (the
+    // same mechanism the pre-M9 Endless button used for its own "coming soon" placeholder) instead
+    // of selecting.
+    const totalW = SKINS.length * SKIN_SWATCH_D + (SKINS.length - 1) * SKIN_SWATCH_GAP;
+    const startX = (CANVAS_WIDTH - totalW) / 2;
+    SKINS.forEach((skin, i) => {
+      const rect: Rect = {
+        x: startX + i * (SKIN_SWATCH_D + SKIN_SWATCH_GAP),
+        y: this.layout.skinPickerY,
+        w: SKIN_SWATCH_D,
+        h: SKIN_SWATCH_D,
+      };
+      this.focus.add({
+        id: `skin:${skin.id}`,
+        kind: 'button',
+        rect,
+        onActivate: () => this.selectSkin(skin.id),
+      });
+    });
+  }
+
+  private selectSkin(id: string): void {
+    const skin = getSkin(id);
+    const unlocked = isSkinUnlocked(skin, unlockStatsFromSave(this.save));
+    if (!unlocked) {
+      this.showToast(`${skin.name}: ${skin.hint}`);
+      return;
+    }
+    this.save.selectedSkin = skin.id;
+    writeSave(this.save);
+    void applySkin(skin.id);
+  }
+
+  /** M9: builds one small preview raster per skin for the picker row - the same recolour pipeline
+   * `render/skinSprites.ts`'s `applySkin` uses for the real gameplay sprites, at a smaller scale.
+   * Never throws even if the sprite atlas isn't ready yet (a plain colour disc covers that frame). */
+  private async loadSkinPreviews(): Promise<void> {
+    const raw = getRawSpriteSource('frog-idle');
+    if (!raw) return;
+    await Promise.all(
+      SKINS.map(async (skin) => {
+        const recolored = recolorFrogSvg(raw, skin);
+        const img = await rasterizeSvgSource(recolored, SKIN_PREVIEW_SCALE, skin.ghost ? 0.7 : 1);
+        this.skinPreviews.set(skin.id, img);
+      }),
+    );
   }
 
   private showToast(text: string): void {
@@ -425,6 +502,7 @@ export class TitleScene implements Scene {
     }
 
     this.renderButtons(r);
+    this.renderSkinPicker(r);
 
     r.text(`HI-SCORE ${this.save.hiScore}`, CANVAS_WIDTH / 2, L.hiScoreY, {
       size: 18,
@@ -506,6 +584,56 @@ export class TitleScene implements Scene {
         },
         { accent: theme.palette.accentA, ...opts },
       );
+    }
+  }
+
+  /** M9: the skin picker row (docs/specs/M9-endless-skins.md section 2) - a small preview raster
+   * per skin (falling back to a flat colour disc while `loadSkinPreviews` is still in flight),
+   * locked ones greyed with a lock glyph, the selected one ringed in gold, the keyboard/gamepad-
+   * focused one ringed in cream. */
+  private renderSkinPicker(r: Renderer): void {
+    const stats = unlockStatsFromSave(this.save);
+    for (const skin of SKINS) {
+      const c = this.focus.get(`skin:${skin.id}`);
+      if (!c) continue;
+      const unlocked = isSkinUnlocked(skin, stats);
+      const selected = this.save.selectedSkin === skin.id;
+      const cx = c.rect.x + c.rect.w / 2;
+      const cy = c.rect.y + c.rect.h / 2;
+      const radius = c.rect.w / 2;
+
+      r.ctx.save();
+      if (!unlocked) r.ctx.globalAlpha = 0.4;
+
+      r.ctx.fillStyle = 'rgba(255, 247, 230, 0.18)';
+      r.ctx.beginPath();
+      r.ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      r.ctx.fill();
+
+      const preview = this.skinPreviews.get(skin.id);
+      if (preview) {
+        drawSpriteImage(r.ctx, preview, cx, cy);
+      } else {
+        r.ctx.fillStyle = skin.body;
+        r.ctx.beginPath();
+        r.ctx.arc(cx, cy, radius * 0.7, 0, Math.PI * 2);
+        r.ctx.fill();
+      }
+
+      if (!unlocked) {
+        r.text('\u{1F512}', cx, cy + 1, { size: 13, weight: 700, align: 'center', color: '#FFF7E6' });
+      }
+      r.ctx.restore();
+
+      if (selected || this.focus.isFocused(`skin:${skin.id}`)) {
+        r.ctx.save();
+        r.ctx.strokeStyle = selected ? '#FFC83D' : '#FFF7E6';
+        r.ctx.lineWidth = 2.5;
+        r.ctx.beginPath();
+        r.ctx.arc(cx, cy, radius + 2, 0, Math.PI * 2);
+        r.ctx.stroke();
+        r.ctx.restore();
+      }
     }
   }
 

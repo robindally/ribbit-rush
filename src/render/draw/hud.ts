@@ -24,6 +24,13 @@ export interface HudState {
   multiplier: number;
   /** Seconds since `multiplier` last changed, driving the badge's pulse-on-change. */
   multiplierPulseT: number;
+  /** M9: 'endless' swaps the centre label to "CROSSING N" plus a difficulty badge
+   * (docs/specs/M9-endless-skins.md section 1). Defaults to campaign display when absent. */
+  mode?: 'campaign' | 'endless';
+  /** M9: current crossing number, only read when `mode === 'endless'`. */
+  crossing?: number;
+  /** M9: current crossing difficulty, only read when `mode === 'endless'`. */
+  difficulty?: number;
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -56,13 +63,23 @@ export function drawHud(r: Renderer, hud: HudState): void {
     color: CREAM,
     outline: INK,
   });
-  r.text(`${hud.worldName.toUpperCase()} - L${hud.level}`, CANVAS_WIDTH / 2, topY, {
-    size: 16,
-    weight: 600,
-    align: 'center',
-    color: CREAM,
-    outline: INK,
-  });
+  if (hud.mode === 'endless') {
+    r.text(`CROSSING ${hud.crossing ?? 1}`, CANVAS_WIDTH / 2, topY, {
+      size: 16,
+      weight: 600,
+      align: 'center',
+      color: CREAM,
+      outline: INK,
+    });
+  } else {
+    r.text(`${hud.worldName.toUpperCase()} - L${hud.level}`, CANVAS_WIDTH / 2, topY, {
+      size: 16,
+      weight: 600,
+      align: 'center',
+      color: CREAM,
+      outline: INK,
+    });
+  }
   r.text(`HI ${hud.hiScore}`, CANVAS_WIDTH - 12, topY, {
     size: 18,
     weight: 700,
@@ -70,6 +87,23 @@ export function drawHud(r: Renderer, hud: HudState): void {
     color: CREAM,
     outline: INK,
   });
+
+  // M9: a small difficulty badge under the "CROSSING N" label (docs/specs/M9-endless-skins.md
+  // section 1: "the current difficulty as a small badge").
+  if (hud.mode === 'endless') {
+    const badgeY = topY + 16;
+    const label = `d${(hud.difficulty ?? 1.2).toFixed(1)}`;
+    r.ctx.save();
+    r.ctx.fillStyle = 'rgba(27, 42, 29, 0.55)';
+    roundRect(r, CANVAS_WIDTH / 2 - 22, badgeY - 8, 44, 16, 8);
+    r.ctx.restore();
+    r.text(label, CANVAS_WIDTH / 2, badgeY, {
+      size: 11,
+      weight: 700,
+      align: 'center',
+      color: GOLD,
+    });
+  }
 
   // Streak multiplier badge, beside the score: pulses briefly when it changes, fades to a quiet
   // 25% when it's back to x1 (docs/specs/M4-juice.md section 6).
