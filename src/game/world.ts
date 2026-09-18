@@ -17,11 +17,11 @@ import {
   NEAR_MISS_WATCH_S,
   START_LIVES,
 } from './constants';
-import { platformAt, vehicleHits } from './collision';
+import { killerHitType, platformAt, vehicleHits } from './collision';
 import { bufferHop, computeHopTarget, consumeHop, createFrog, createHopBuffer } from './frog';
 import type { HopBuffer } from './frog';
-import { makeClassicLevel } from './level';
-import { stepLane } from './lanes';
+import { getLevel } from './level';
+import { isTrainWarningActive, stepFloeState, stepLane } from './lanes';
 import {
   advanceStreak,
   createStreakState,
@@ -32,7 +32,16 @@ import {
   levelClearScore,
 } from './scoring';
 import type { StreakHopKind, StreakState } from './scoring';
-import type { DeathCause, Dir, Frog, HomeSlotState, LaneDef, LevelDef } from './types';
+import type { DeathCause, Dir, Frog, HomeSlotState, LaneDef, LevelDef, MoverType } from './types';
+
+/** Maps a killer mover's type to the death it inflicts. `snake` reuses the `DeathCause` value the
+ * type already had (M3 report: "snake unreachable until M6 wires up the hazard" - this closes that
+ * gap). Every other killer type (vehicles, jetski, otter) is a solid hit - squish, the same tween
+ * `render/anim.ts` already plays for every undocumented `DeathCause` - see docs/specs/M6-report.md
+ * "Deviations" for the jetski/otter judgment call. */
+function deathCauseForKiller(type: MoverType): DeathCause {
+  return type === 'snake' ? 'snake' : 'squish';
+}
 
 const TIMER_LOW_S = 5; // docs/specs/M4-juice.md section 8
 
@@ -84,6 +93,10 @@ export class World {
   private nearMissWatch: { row: number; x: number; expiresAt: number } | null = null;
   private timerLowFired = false;
   private tickAccumulator = 0;
+  /** Rows currently inside their train's 1.5s crossing-warning window, so `trainWarning` fires
+   * once per approach rather than every tick - reset the instant the warning window closes so the
+   * next lap can warn again (M6: docs/LEVELS.md "new mover and lane rules"). */
+  private trainWarned = new Set<number>();
 
   constructor(level: LevelDef, levelNumber = 1, seed = 1) {
     this.level = level;
@@ -122,6 +135,7 @@ export class World {
     for (const lane of this.lanes) stepLane(lane, dt);
     this.updateHomeHazards(dt);
     this.updateNearMissWatch();
+    this.updateTrainWarnings();
 
     this.timeLeft -= dt;
     if (this.timeLeft <= 0) {
@@ -144,13 +158,15 @@ export class World {
       }
 
       if (this.frog.hopT >= 0.5) {
-        // Mid-hop: only a vehicle hit against the target row counts (row already committed at
+        // Mid-hop: only a killer hit against the target row counts (row already committed at
         // hop start); no platform/drown check runs while airborne. See ARCHITECTURE.md
-        // section 7, "Hop-time collision rule".
+        // section 7, "Hop-time collision rule", extended by M6 to every lane kind (killer movers
+        // - docs/LEVELS.md "new mover and lane rules").
         const lane = this.laneAt(this.frog.row);
         if (lane) {
           const hitbox: [number, number] = [this.frog.x + 0.2, this.frog.x + 0.8];
-          if (vehicleHits(lane, hitbox)) this.die('squish');
+          const killer = killerHitType(lane, hitbox);
+          if (killer) this.die(deathCauseForKiller(killer));
         }
       }
       return;
@@ -280,8 +296,10 @@ export class World {
 
   /**
    * Full row resolution for the row the frog just landed on (hopT reached 1): home row as
-   * today, a road row runs the vehicle check, a river row drowns the frog unless a platform is
-   * under its centre. See ARCHITECTURE.md section 7, "Hop-time collision rule".
+   * today, everything else runs `resolveRowHazard` (any lane kind: road/rail vehicle-style
+   * kills, median snakes, river killers-and-no-platform-drowning), then an oil slide if the
+   * landing tile has one. See ARCHITECTURE.md section 7, "Hop-time collision rule", and M6's
+   * docs/LEVELS.md "new mover and lane rules".
    */
   private resolveLandingRow(): void {
     const frog = this.frog;
@@ -289,31 +307,72 @@ export class World {
       this.resolveHomeLanding();
       return;
     }
+    if (this.resolveRowHazard(frog.row, frog.x)) return;
+    this.applyOilSlide();
+  }
 
-    const lane = this.laneAt(frog.row);
-    if (!lane) return;
+  /**
+   * Whether standing at `(row, x)` right now is fatal: a killer-type mover overlapping the
+   * hitbox (docs/LEVELS.md: "in any lane kind, even while riding a platform"), or - river lanes
+   * only, and only once no killer already got there first - no platform under the centre. Calls
+   * `die()` and returns true on a hit; pure aside from that. Shared by the landing resolution
+   * above and the continuous idle check below, and by the post-oil-slide tile.
+   */
+  private resolveRowHazard(row: number, x: number): boolean {
+    const lane = this.laneAt(row);
+    if (!lane) return false;
 
-    if (lane.kind === 'road') {
-      const hitbox: [number, number] = [frog.x + 0.2, frog.x + 0.8];
-      if (vehicleHits(lane, hitbox)) this.die('squish');
-      return;
+    const hitbox: [number, number] = [x + 0.2, x + 0.8];
+    const killer = killerHitType(lane, hitbox);
+    if (killer) {
+      this.die(deathCauseForKiller(killer));
+      return true;
     }
 
     if (lane.kind === 'river') {
-      const centre = frog.x + 0.5;
-      if (!platformAt(lane, centre, this.elapsed)) this.die('drown');
+      const centre = x + 0.5;
+      if (!platformAt(lane, centre, this.elapsed)) {
+        this.die('drown');
+        return true;
+      }
     }
+    return false;
+  }
+
+  /** M6 oil slide (docs/LEVELS.md "new mover and lane rules"): landing on an oil-decorated tile
+   * slides the frog one further tile in the same direction as the hop that just landed there,
+   * blocked at the grid edge or a hedge column (reuses `computeHopTarget`'s own bounds/hedge
+   * logic). The new tile is then hazard-checked too - "the slide can land the frog under a
+   * vehicle; that is the point." Not chained: only ever one slide per landing. */
+  private applyOilSlide(): void {
+    const frog = this.frog;
+    const col = Math.round(frog.x);
+    const hazard = this.level.hazardTiles?.find(
+      (h) => h.type === 'oil' && h.row === frog.row && h.col === col,
+    );
+    if (!hazard) return;
+
+    const target = computeHopTarget({ x: frog.x, row: frog.row }, frog.facing);
+    if (target.blocked) return; // blocked at the grid edge or into a hedge: no slide
+
+    const fromX = frog.x;
+    const fromRow = frog.row;
+    frog.x = target.toX;
+    frog.row = target.toRow;
+    gameEvents.emit({ type: 'oilSlide', x: frog.x, row: frog.row, fromX, fromRow });
+
+    if (frog.row === HOME_ROW) {
+      this.resolveHomeLanding();
+      return;
+    }
+    this.resolveRowHazard(frog.row, frog.x);
   }
 
   private resolveRowEffects(dt: number): void {
     const lane = this.laneAt(this.frog.row);
     if (!lane) return;
 
-    if (lane.kind === 'road') {
-      const hitbox: [number, number] = [this.frog.x + 0.2, this.frog.x + 0.8];
-      if (vehicleHits(lane, hitbox)) this.die('squish');
-      return;
-    }
+    if (this.resolveRowHazard(this.frog.row, this.frog.x)) return;
 
     if (lane.kind === 'river') {
       const centre = this.frog.x + 0.5;
@@ -322,9 +381,34 @@ export class World {
         if (this.frog.state === 'idle') {
           this.frog.x += hit.speed * dt;
         }
+        if (hit.mover.type === 'floe' && hit.mover.floe) {
+          hit.mover.floe = stepFloeState(hit.mover.floe, dt, true);
+          if (hit.mover.floe.state === 'sunk') {
+            this.die('drown');
+            return;
+          }
+        }
         this.checkOffscreen();
-      } else {
-        this.die('drown');
+      }
+      // else: resolveRowHazard already drowned the frog above (no platform under the centre).
+    }
+  }
+
+  /** Fires `trainWarning` once, 1.5s before a rail lane's train leading edge enters the screen,
+   * and re-arms once the warning window closes so the next approach can warn again (M6:
+   * docs/LEVELS.md "new mover and lane rules"). */
+  private updateTrainWarnings(): void {
+    for (const lane of this.lanes) {
+      if (lane.kind !== 'rail') continue;
+      for (const mover of lane.movers) {
+        if (mover.type !== 'train') continue;
+        const active = isTrainWarningActive(lane, mover, COLS);
+        if (active && !this.trainWarned.has(lane.row)) {
+          this.trainWarned.add(lane.row);
+          gameEvents.emit({ type: 'trainWarning', row: lane.row });
+        } else if (!active) {
+          this.trainWarned.delete(lane.row);
+        }
       }
     }
   }
@@ -454,11 +538,24 @@ export class World {
   }
 
   private loadNextLevel(): void {
-    this.levelNumber += 1;
-    this.level = makeClassicLevel(this.levelNumber);
+    this.loadLevel(this.levelNumber + 1);
+  }
+
+  private loadLevel(n: number): void {
+    this.levelNumber = n;
+    this.level = getLevel(n);
     this.lanes = this.level.lanes;
     this.homes = HOME_COLS.map(() => null);
+    this.trainWarned.clear();
     this.respawnFrogOnly();
+  }
+
+  /** Dev-only level jump (docs/specs/M6-worlds.md section 6: "pressing L then a digit or two
+   * jumps to that level when import.meta.env.DEV"; also used by the reviewer's
+   * `scripts/review.mjs --level N` via `window.__rr.jumpToLevel`). Public on purpose - callable
+   * from outside the class, unlike the private level-progression methods above. */
+  jumpToLevel(n: number): void {
+    this.loadLevel(n);
   }
 
   private addScore(delta: number, label?: string): void {
@@ -474,7 +571,7 @@ export class World {
   }
 }
 
-/** Builds a World for classic level `n`, generating the level from the fixed lane table. */
-export function createClassicWorld(n: number, seed = 1): World {
-  return new World(makeClassicLevel(n), n, seed);
+/** Builds a World starting at campaign level `n`, generating it from `game/level.ts`'s tables. */
+export function createCampaignWorld(n: number, seed = 1): World {
+  return new World(getLevel(n), n, seed);
 }

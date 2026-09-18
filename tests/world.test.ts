@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { World } from '../src/game/world';
+import { gameEvents } from '../src/core/events';
 import { START_LIVES } from '../src/game/scoring';
 import { HOME_ROW, MEDIAN_ROW } from '../src/game/constants';
 import type { Frog, LaneDef, LevelDef } from '../src/game/types';
@@ -229,5 +230,217 @@ describe('home slot occupancy', () => {
 
     expect(world.frog.state).toBe('dying');
     expect(world.frog.deathCause).toBe('occupied');
+  });
+});
+
+// --- M6: killer movers, any lane kind (docs/specs/M6-worlds.md section 1, "even while riding a
+// platform") ---
+
+/** Places the frog idle at an arbitrary row/x without going through any prior hops. */
+function placeFrogIdleAt(frog: Frog, x: number, row: number): void {
+  frog.x = x;
+  frog.row = row;
+  frog.fromX = x;
+  frog.fromRow = row;
+  frog.toX = x;
+  frog.toRow = row;
+  frog.hopT = 1;
+  frog.state = 'idle';
+  frog.maxRow = row;
+  frog.deathCause = undefined;
+}
+
+describe('M6 killer movers', () => {
+  it('median snapping still works on a lane that now carries a mover', () => {
+    const medianLane: LaneDef = {
+      row: MEDIAN_ROW,
+      kind: 'median',
+      speed: 0,
+      period: 20,
+      movers: [{ type: 'snake', width: 1.5, offset: 19 }], // far away, x = 19 - 1.5 = 17.5 - never
+      // overlaps the hop's path, so this only exercises the snap, not the kill (see the next test).
+    };
+    const riverLane: LaneDef = {
+      row: 6,
+      kind: 'river',
+      speed: 0,
+      period: 20,
+      movers: [{ type: 'log', width: 10, offset: 10 }], // wide, safe platform under the whole row
+    };
+    const world = new World(levelWithLanes([medianLane, riverLane]), 1, 1);
+    placeFrogIdleAt(world.frog, 6.4, 6); // as if it just drifted on a platform, non-integer x
+
+    world.queueHop('down'); // row 6 -> MEDIAN_ROW (7); toX snaps to round(6.4) = 6
+    expect(world.frog.toX).toBe(6);
+    expect(world.frog.toRow).toBe(MEDIAN_ROW);
+
+    const dt = 1 / 60;
+    for (let i = 0; i < 7; i++) world.update(dt); // run the hop to landing
+
+    expect(world.frog.row).toBe(MEDIAN_ROW);
+    expect(world.frog.x).toBe(6);
+    expect(world.frog.state).toBe('idle'); // nothing there to kill it
+  });
+
+  it('a snake on the median lane kills a frog landing on it', () => {
+    const medianLane: LaneDef = {
+      row: MEDIAN_ROW,
+      kind: 'median',
+      speed: 0,
+      period: 20,
+      movers: [{ type: 'snake', width: 1.5, offset: 7.5 }], // x = 7.5 - 1.5 = 6, spans [6, 7.5)
+    };
+    const world = new World(levelWithLanes([medianLane]), 1, 1);
+    placeFrogIdleAt(world.frog, 6, 8); // row 8, adjacent to the median; integer x, no drift
+    world.frog.facing = 'up';
+
+    world.queueHop('up'); // straight up, x unchanged throughout - lands right on the snake
+    const dt = 1 / 60;
+    for (let i = 0; i < 7; i++) world.update(dt);
+
+    expect(world.frog.state).toBe('dying');
+    expect(world.frog.deathCause).toBe('snake');
+  });
+
+  it('a killer mover kills a frog riding a platform in the same river lane', () => {
+    const lane: LaneDef = {
+      row: 4,
+      kind: 'river',
+      speed: 0,
+      period: 20,
+      movers: [
+        { type: 'log', width: 4, offset: 4 }, // x = 4 - 4 = 0, spans [0, 4) - a real platform
+        { type: 'jetski', width: 1, offset: 6, speed: 0 }, // x = 6 - 4 = 2, spans [2, 3)
+      ],
+    };
+    const world = new World(levelWithLanes([lane]), 1, 1);
+    // x=2.3 is inside both the log's span [0,4) - it would otherwise be a safe ride - and the
+    // jetski's hitbox once the +/-0.2 margin is applied.
+    placeFrogIdleAt(world.frog, 2.3, 4);
+
+    world.update(1 / 60);
+    expect(world.frog.state).toBe('dying');
+    expect(world.frog.deathCause).toBe('squish'); // jetski has no dedicated cause - see world.ts
+  });
+});
+
+// --- M6: oil slide (docs/LEVELS.md "new mover and lane rules") ---
+
+function levelWithHazards(lanes: LaneDef[], hazardTiles: LevelDef['hazardTiles']): LevelDef {
+  return { ...levelWithLanes(lanes), hazardTiles };
+}
+
+describe('M6 oil slide', () => {
+  it('is blocked into a hedge column - no slide, no death', () => {
+    const riverLane: LaneDef = {
+      row: 2,
+      kind: 'river',
+      speed: 0,
+      period: 200,
+      movers: [{ type: 'log', width: 100, offset: 100 }], // wide safe platform under the whole row
+    };
+    const level = levelWithHazards([riverLane], [{ col: 1, row: 2, type: 'oil' }]);
+    const world = new World(level, 1, 1);
+    placeFrogIdleAt(world.frog, 1, 3); // col 1 is not a HOME_COLS slot
+    world.frog.facing = 'up';
+
+    world.queueHop('up'); // lands on row 2, col 1 (oil); the slide would target row 1 (home row)
+    // col 1, which isn't a home slot - blocked, per the same hedge rule computeHopTarget uses.
+    const dt = 1 / 60;
+    for (let i = 0; i < 7; i++) world.update(dt);
+
+    expect(world.frog.row).toBe(2);
+    expect(world.frog.x).toBe(1);
+    expect(world.frog.state).toBe('idle'); // no slide, no death
+  });
+
+  it('slides right when hopping right onto an oil tile, landing under whatever is there', () => {
+    const roadLane: LaneDef = {
+      row: 9,
+      kind: 'road',
+      speed: 0,
+      period: 20,
+      movers: [{ type: 'car', width: 1, offset: 8 }], // x = 8 - 1 = 7, spans [7, 8)
+    };
+    const level = levelWithHazards([roadLane], [{ col: 6, row: 9, type: 'oil' }]);
+    const world = new World(level, 1, 1);
+    placeFrogIdleAt(world.frog, 5, 9);
+    world.frog.facing = 'right';
+
+    world.queueHop('right'); // lands on col 6 (oil), then slides to col 7 - straight into the car
+    const dt = 1 / 60;
+    for (let i = 0; i < 7; i++) world.update(dt);
+
+    expect(world.frog.x).toBe(7);
+    expect(world.frog.state).toBe('dying');
+    expect(world.frog.deathCause).toBe('squish');
+  });
+
+  it('is blocked at the grid edge - no slide, no move past column 12', () => {
+    const roadLane: LaneDef = { row: 9, kind: 'road', speed: 0, period: 20, movers: [] };
+    const level = levelWithHazards([roadLane], [{ col: 12, row: 9, type: 'oil' }]);
+    const world = new World(level, 1, 1);
+    placeFrogIdleAt(world.frog, 11, 9);
+    world.frog.facing = 'right';
+
+    world.queueHop('right'); // lands on col 12 (oil), slide right would go to col 13 - blocked
+    const dt = 1 / 60;
+    for (let i = 0; i < 7; i++) world.update(dt);
+
+    expect(world.frog.x).toBe(12); // stayed put, no death
+    expect(world.frog.state).toBe('idle');
+  });
+
+  it('emits an oilSlide event with the pre- and post-slide position', () => {
+    const roadLane: LaneDef = { row: 9, kind: 'road', speed: 0, period: 20, movers: [] };
+    const level = levelWithHazards([roadLane], [{ col: 6, row: 9, type: 'oil' }]);
+    const world = new World(level, 1, 1);
+    placeFrogIdleAt(world.frog, 5, 9);
+    world.frog.facing = 'right';
+
+    const events: { x: number; row: number; fromX: number; fromRow: number }[] = [];
+    const onOilSlide = (e: { x: number; row: number; fromX: number; fromRow: number }): void => {
+      events.push(e);
+    };
+    gameEvents.on('oilSlide', onOilSlide);
+
+    world.queueHop('right');
+    const dt = 1 / 60;
+    for (let i = 0; i < 7; i++) world.update(dt);
+    gameEvents.off('oilSlide', onOilSlide);
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ fromX: 6, fromRow: 9, x: 7, row: 9 });
+  });
+});
+
+// --- M6: train crossing warning fires once per approach (docs/LEVELS.md "new mover and lane
+// rules") ---
+
+describe('M6 train warning', () => {
+  it('fires trainWarning exactly once, 1.5s before the train enters', () => {
+    // width 6, speed +6: entry boundary at offset = maxWidth - width = 0. Put offset exactly
+    // TRAIN_WARNING_S * speed = 9 tiles before that boundary (mod period 40): offset = 40 - 9 = 31.
+    const railLane: LaneDef = {
+      row: 8,
+      kind: 'rail',
+      speed: 6,
+      period: 40,
+      movers: [{ type: 'train', width: 6, offset: 31 }],
+    };
+    const world = new World(levelWithLanes([railLane]), 1, 1);
+
+    const fired: number[] = [];
+    const onTrainWarning = (e: { row: number }): void => {
+      fired.push(e.row);
+    };
+    gameEvents.on('trainWarning', onTrainWarning);
+
+    const dt = 1 / 60;
+    // 1.5s of simulated time steps right up to (and past) the warning boundary.
+    for (let i = 0; i < Math.round(1.5 * 60) + 5; i++) world.update(dt);
+    gameEvents.off('trainWarning', onTrainWarning);
+
+    expect(fired).toEqual([8]); // fired exactly once, for the rail lane's row
   });
 });

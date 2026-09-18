@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 48" width="96" height="48">
+  <!-- Ribbit Rush ice floe, 2 tiles. Irregular rounded polygon (bible: #E6F0F8, cracks #9FB9CF -
+       crack paths are drawn in code only while cracking, see render/draw/entities.ts). -->
+  <path d="M6 26 C4 20 10 14 18 13 C24 8 34 7 42 11 C54 6 70 8 80 14 C90 16 93 24 88 30
+           C90 35 84 40 74 39 C64 43 46 43 36 39 C24 42 12 39 8 33 C4 32 4 28 6 26 Z" fill="#B9CBDA"/>
+  <path d="M7 25 C5.5 20 11 14.5 18.5 13.5 C24.5 9 34 8 41.5 11.5 C53.5 7 69 9 79 14.5
+           C88.5 16.5 91.5 23.5 87 29 C89 34 83 38.5 73.5 37.5 C63.5 41.5 46 41.5 36 37.5
+           C24.5 40.5 13 37.5 9 32 C5.5 31 5 27.5 7 25 Z" fill="#E6F0F8"/>
+  <!-- subtle interior texture, static (not the dynamic crack overlay) -->
+  <g stroke="#CFE0EE" stroke-width="1.2" fill="none" opacity="0.7">
+    <path d="M20 18 L26 24"/>
+    <path d="M62 15 L58 22"/>
+  </g>
+  <ellipse cx="26" cy="18" rx="10" ry="4" fill="#FFFFFF" opacity="0.3"/>
+</svg>

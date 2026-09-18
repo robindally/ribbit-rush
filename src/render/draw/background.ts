@@ -17,7 +17,7 @@ import {
   TILE,
 } from '../../game/constants';
 import type { WorldTheme } from '../../game/themes';
-import type { HomeSlotState } from '../../game/types';
+import type { HomeSlotState, LevelDef } from '../../game/types';
 import { homeLandingScale, homeRingVisual } from '../anim';
 import type { Renderer } from '../renderer';
 import { getSpriteAtlas } from '../sprites';
@@ -97,12 +97,13 @@ function drawHomeRowStatic(ctx: CanvasRenderingContext2D, theme: WorldTheme): vo
 
 /**
  * Pre-renders every static background element (banks, road, median, home row, river base and
- * bank foam) for one level to an offscreen canvas at device-pixel resolution. Callers blit it
- * once per frame with `ctx.drawImage(layer, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)` instead of
- * re-drawing any of this per frame. `seed` drives the tuft/speckle RNG so the look can vary (and
- * be reproduced) per level.
+ * bank foam, plus M6's rail/tram rails and oil decals) for one level to an offscreen canvas at
+ * device-pixel resolution. Callers blit it once per frame with
+ * `ctx.drawImage(layer, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)` instead of re-drawing any of this per
+ * frame. `level` supplies the lanes (which road row is a rail lane or carries a tram) and hazard
+ * tiles; `seed` drives the tuft/speckle RNG so the look can vary (and be reproduced) per level.
  */
-export function buildStaticLayer(theme: WorldTheme, seed: number): HTMLCanvasElement {
+export function buildStaticLayer(theme: WorldTheme, level: LevelDef, seed: number): HTMLCanvasElement {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.round(CANVAS_WIDTH * dpr));
@@ -119,7 +120,7 @@ export function buildStaticLayer(theme: WorldTheme, seed: number): HTMLCanvasEle
   drawHomeRowStatic(ctx, theme);
   drawWaterBankStatic(ctx, theme);
   drawMedianStatic(ctx, theme);
-  drawRoadStatic(ctx, theme, rng);
+  drawRoadStatic(ctx, theme, rng, level.lanes, level.hazardTiles);
   drawGrassBand(ctx, theme, START_ROW * TILE, rng);
 
   return canvas;

@@ -158,7 +158,14 @@ const W3_CHORDS: [string, string, string][] = [
   ['Ab3', 'C4', 'Eb4'], // III - Ab
   ['Eb4', 'G4', 'Bb4'], // VII - Eb
 ];
-const W3_PAD: NoteEvent[][] = W3_CHORDS.map((chord) => chord.map((n) => ev(0, n, 16, 0.45)));
+// Pad velocity per chord tone (audio limiter fix, docs/specs/M6-report.md): three simultaneous
+// chord tones, each two detuned sawtooth oscillators (triggerPad in audio/music.ts), summed into
+// one gain node - at the original 0.45/voice this constructively summed well past 0dBFS (the
+// headless probe, scripts/audio-probe.mjs, measured a 1.54 peak / 0.28 RMS before this trim).
+// 0.16 keeps the chord's combined peak reasonable without a real DynamicsCompressorNode fully
+// masking it - see the master-bus limiter added in src/core/audio.ts.
+const W3_PAD_VEL = 0.095;
+const W3_PAD: NoteEvent[][] = W3_CHORDS.map((chord) => chord.map((n) => ev(0, n, 16, W3_PAD_VEL)));
 
 const W3_LEAD_CHORDS: [string, string, string][] = [
   ['F4', 'Ab4', 'C5'],
@@ -166,8 +173,11 @@ const W3_LEAD_CHORDS: [string, string, string][] = [
   ['Ab4', 'C5', 'Eb5'],
   ['Eb5', 'G5', 'Bb5'],
 ];
+// Arpeggio (lead) velocity trim, same fix: continuous 16th notes at the original 0.6 stacked with
+// the pad and kick/snare pushed world 3's overall RMS well outside the 0.06-0.11 target.
+const W3_LEAD_VEL = 0.22;
 const W3_LEAD: NoteEvent[][] = W3_LEAD_CHORDS.map((chord) =>
-  Array.from({ length: 16 }, (_, step) => ev(step, chord[step % 3], 1, 0.6)),
+  Array.from({ length: 16 }, (_, step) => ev(step, chord[step % 3], 1, W3_LEAD_VEL)),
 );
 
 const WORLD_3: WorldMusicDef = {
@@ -192,8 +202,14 @@ const WORLD_3: WorldMusicDef = {
 // borrowed/modal-mixture colour outside the dorian scale (dorian's own 4th-degree seventh chord
 // would be Gmaj7, G B D F), same borrowed-chord idea as world 3's pad VI - so `pad` stays exempt
 // from the scale check (see PITCHED_TRACKS above) and plays the spec's literal Gm7 voicing.
-const W4_DM7: NoteEvent[] = ['D4', 'F4', 'A4', 'C5'].map((n) => ev(0, n, 16, 0.45));
-const W4_GM7: NoteEvent[] = ['G3', 'Bb3', 'D4', 'F4'].map((n) => ev(0, n, 16, 0.45));
+// Pad velocity trim, same reasoning/fix as world 3 above (docs/specs/M6-report.md): four
+// simultaneous chord tones (one more than world 3's) made world 4 the loudest of the five worlds
+// in the audio probe (1.62 peak / 0.36 RMS before this trim) - not named in the milestone's own
+// audio-fix note (which only called out world 3), but it fails the same general "RMS 0.06-0.11,
+// peak < 0.9" acceptance bar, so it gets the same treatment.
+const W4_PAD_VEL = 0.08;
+const W4_DM7: NoteEvent[] = ['D4', 'F4', 'A4', 'C5'].map((n) => ev(0, n, 16, W4_PAD_VEL));
+const W4_GM7: NoteEvent[] = ['G3', 'Bb3', 'D4', 'F4'].map((n) => ev(0, n, 16, W4_PAD_VEL));
 const W4_PAD: NoteEvent[][] = [W4_DM7, W4_DM7, W4_GM7, W4_GM7];
 
 // The lead is the strictly-melodic, scale-bound line: its "Gm7" bars pick the chord tones that are

@@ -2,9 +2,10 @@
   <!-- Ribbit Rush motorbike, faces right. Two wheels in line along the direction of travel
        (front at the right, rear at the left), a narrow 29px body between them - the body is
        shorter than the wheels so each wheel pokes past its top and bottom edge, matching the
-       template's wheel-poke convention. Rider on top: round helmet forward of centre with two
-       shoulder ellipses behind it, plus a 1px headlight dot at the front. See ART_BIBLE.md
-       section 4. -->
+       template's wheel-poke convention. Rider on top: round helmet forward of centre, with the
+       two shoulder ellipses directly behind it - same y as the helmet centre, to its left along
+       the direction of travel, not stacked diagonally (docs/specs/M6-worlds.md section 5's
+       touch-up) - plus a 1px headlight dot at the front. See ART_BIBLE.md section 4. -->
 
   <!-- wheels: rear (left) and front (right), ~10x6.5px, in line along the travel axis -->
   <g fill="#22242A">
@@ -17,10 +18,10 @@
   <rect x="9.5" y="22" width="29" height="4.2" rx="2.1" fill="#1E1E1E"/>
   <rect x="9.5" y="22" width="29" height="3.2" rx="2.1" fill="#2B2B2B" stroke="#252525" stroke-width="0.8"/>
 
-  <!-- rider: two small shoulder ellipses behind the helmet -->
+  <!-- rider: two shoulder ellipses directly behind the helmet, same y, no diagonal stacking -->
   <g fill="#E8474B">
-    <ellipse cx="16.5" cy="21.5" rx="3.6" ry="4.4" transform="rotate(-8 16.5 21.5)"/>
-    <ellipse cx="21" cy="17" rx="3.2" ry="4" transform="rotate(-8 21 17)"/>
+    <ellipse cx="18.5" cy="12" rx="3.6" ry="4.2"/>
+    <ellipse cx="22.3" cy="12" rx="3.4" ry="4.1"/>
   </g>
 
   <!-- helmet: 9px round, rider colour, slightly forward of the bike's centre (x=24) -->

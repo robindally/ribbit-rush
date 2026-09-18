@@ -120,9 +120,13 @@ one-deep hop buffer.
 ```ts
 export type MoverType =
   | 'car' | 'taxi' | 'sports' | 'pickup' | 'van' | 'truck' | 'bus' | 'motorbike' | 'tram' | 'train'
-  | 'log' | 'turtle' | 'croc' | 'floe' | 'snake' | 'otter';
+  | 'jetski' | 'log' | 'turtle' | 'croc' | 'floe' | 'snake' | 'otter';
 
 export interface DiveDef { up: number; down: number; phase: number }   // seconds
+
+/** Floe crack/sink runtime state (M6). Mutable - unlike DiveDef, standingT depends on how long
+ * *this frog attempt* has stood on *this floe instance*, not on lane time alone. */
+export interface FloeState { standingT: number; state: 'solid' | 'cracking' | 'sunk' }
 
 export interface MoverDef {
   offset: number;        // tiles, in [0, period)
@@ -130,6 +134,7 @@ export interface MoverDef {
   type: MoverType;
   dive?: DiveDef;        // turtles only
   speed?: number;        // overrides the lane speed for this mover (M6: jet skis, otters, snakes)
+  floe?: FloeState;      // floes only (M6)
 }
 
 export type LaneKind = 'road' | 'river' | 'rail' | 'median' | 'bank' | 'home';
@@ -149,6 +154,20 @@ export interface LaneDef {
   `frog.x += speed * dt`.
 - Turtle dive state machine: `up` (up s) -> `sinking` (0.5 s) -> `down` (down s) -> `rising`
   (0.5 s). A turtle is a platform unless its state is `down`. Phase offsets the cycle start.
+- **Killer movers (M6).** Every vehicle type plus `jetski`, `otter`, `snake` kill on hitbox overlap
+  in any lane kind (`killerHits`/`killerHitType` in `game/collision.ts`), even while the frog rides
+  a platform in the same river lane - checked before the platform/drown check, so a killer always
+  wins. `median` lanes may carry movers (snakes); `rail` lanes carry a `train` (width 6) - see
+  `game/lanes.ts`'s `secondsUntilLeadingEdgeEnters`/`isTrainWarningActive` for the 1.5 s crossing
+  warning (`trainWarning` GameEvent) and `TRAIN_WARNING_S`.
+- **Floe (M6).** While the frog stands on one, `standingT` accumulates (`stepFloeState` in
+  `game/lanes.ts`); at 2 s (`FLOE_CRACK_S`) it enters `cracking`, and 0.4 s later (`FLOE_SINK_S`)
+  `sunk` - the frog drowns if still aboard. `stepLane` resets a floe to `solid` the instant it wraps
+  off screen.
+- **Oil (M6).** `LevelDef.hazardTiles` (`{ col, row, type: 'oil' }[]`) - landing on one slides the
+  frog one further tile in the hop's own direction (`World.applyOilSlide`, reusing
+  `computeHopTarget`'s bounds/hedge logic), blocked at the grid edge or a hedge column. Emits an
+  `oilSlide` GameEvent for the renderer's 90 ms tween.
 - Lanes are pure: `stepLane(lane, dt)` mutates positions; `platformAt(lane, xCenter)` and
   `vehicleHits(lane, hitbox)` are pure helpers in `collision.ts` and are unit tested.
 
@@ -205,8 +224,14 @@ export type GameEvent =
   | { type: 'extraLife' }
   | { type: 'timerLow' }
   | { type: 'powerup'; kind: string }
-  | { type: 'gameOver'; score: number };
+  | { type: 'gameOver'; score: number }
+  | { type: 'oilSlide'; x: number; row: number; fromX: number; fromRow: number }   // M6
+  | { type: 'trainWarning'; row: number };                                        // M6
 ```
+
+(`bonk`/`land`/`extraLife` above also carry `x`/`row` and a `tick` variant exists in the real
+union - M4/M5 additions this section was never updated for; not repeated here to keep the diff
+focused on M6's own two new variants.)
 
 `events.ts` exports a typed `on`, `off`, `emit`. Audio, FX, and popups subscribe. Gameplay never
 calls audio or FX directly.
@@ -222,12 +247,15 @@ export interface LevelDef {
   timeLimit: number;          // seconds per frog
   lanes: LaneDef[];
   homes: { crocChance: number; flyChance: number };
+  hazardTiles?: { col: number; row: number; type: 'oil' }[]; // M6, world 3 only today
 }
 ```
 
-`level.ts` exports `makeClassicLevel(n: number): LevelDef` for the core milestones: a fixed lane
-table with speed multiplied by `1 + 0.12 * (n - 1)`, turtle diving from level 2, and croc chance
-rising with n. World tables replace this in M6.
+`level.ts` exports `getLevel(n: number): LevelDef` for the 15 campaign levels
+(`docs/LEVELS.md`'s per-world tables and per-level modifiers), replacing the M0-M2
+`makeClassicLevel` fixed table. Past level 15 it loops world 5's levels 13-15 with every lane and
+killer/platform speed scaled up 5% per full 3-level loop (Endless mode proper is M9). Dev-only:
+`World.jumpToLevel(n)` (also `window.__rr.jumpToLevel(n)` in DEV) jumps straight to any level.
 
 ## 11. Renderer and sprites
 

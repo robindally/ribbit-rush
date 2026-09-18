@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Ribbit Rush rail tile, tileable horizontally (bible section 6: "Rail lane (world 5): Two
+       rails in #6B7280 with sleepers"). Two rails at fixed y so repeated tiles line up; one
+       sleeper per tile keeps the spacing even when tiled. -->
+  <rect x="2" y="16" width="44" height="6" rx="2" fill="#4A4E58" opacity="0.5"/>
+  <rect x="0" y="15.5" width="48" height="3" fill="#6B7280"/>
+  <rect x="0" y="31.5" width="48" height="3" fill="#6B7280"/>
+  <rect x="20" y="13.5" width="8" height="22" rx="1.5" fill="#4A4E58"/>
+</svg>

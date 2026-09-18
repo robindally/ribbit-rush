@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Ribbit Rush oil slick decal (ART_BIBLE.md section 4: "oil, 1x1 decal, dark iridescent
+       ellipse"). Only ever placed in world 3 (Neon City) per docs/LEVELS.md, so the iridescent
+       sheen reuses that world's own accentB/waterLight token (#3EF2FF) rather than inventing one. -->
+  <ellipse cx="24" cy="25" rx="17" ry="10.5" fill="#141018" opacity="0.85"/>
+  <ellipse cx="24" cy="25" rx="17" ry="10.5" fill="none" stroke="#1B2A1D" stroke-width="1.2" opacity="0.4"/>
+  <path d="M13 21 C18 17 30 17 35 21" fill="none" stroke="#3EF2FF" stroke-width="1.6" stroke-linecap="round" opacity="0.4"/>
+  <path d="M15 29 C20 32 28 32 33 29" fill="none" stroke="#FF3EA5" stroke-width="1.3" stroke-linecap="round" opacity="0.3"/>
+  <ellipse cx="18" cy="21" rx="4" ry="1.8" fill="#FFFFFF" opacity="0.18"/>
+</svg>

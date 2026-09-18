@@ -37,12 +37,17 @@ export interface HopTarget {
 const LAND_ROWS = new Set<number>([MEDIAN_ROW, START_ROW, HOME_ROW]);
 
 /**
- * Computes the target x/row for a hop in `dir` from the frog's current position, without
- * mutating `frog`. Hop targets snap to the nearest tile column on land rows (median, start
- * bank, home) and keep the continuous x on river rows. Bounds: can't hop below the start bank,
- * can't hop past column 0 or 12, and can't hop into a hedge column of the home row.
+ * Computes the target x/row for a hop in `dir` from `pos`, without mutating anything. Hop targets
+ * snap to the nearest tile column on land rows (median, start bank, home) and keep the continuous
+ * x on river rows. Bounds: can't hop below the start bank, can't hop past column 0 or 12, and
+ * can't hop into a hedge column of the home row.
+ *
+ * Takes `{ x, row }` rather than a full `Frog` (any `Frog` still satisfies this structurally) so
+ * `game/world.ts` can reuse the exact same bounds/hedge logic for the M6 oil-slide mechanic
+ * (docs/LEVELS.md "new mover and lane rules": sliding one extra tile in the hop direction,
+ * "blocked at the grid edge or into a hedge") without duplicating it.
  */
-export function computeHopTarget(frog: Frog, dir: Dir): HopTarget {
+export function computeHopTarget(pos: { x: number; row: number }, dir: Dir): HopTarget {
   let dx = 0;
   let dRow = 0;
   switch (dir) {
@@ -60,20 +65,20 @@ export function computeHopTarget(frog: Frog, dir: Dir): HopTarget {
       break;
   }
 
-  const toRow = frog.row + dRow;
-  let toX = frog.x + dx;
+  const toRow = pos.row + dRow;
+  let toX = pos.x + dx;
 
   if (toRow > START_ROW || toRow < HOME_ROW) {
-    return { blocked: true, hedge: false, toX: frog.x, toRow: frog.row };
+    return { blocked: true, hedge: false, toX: pos.x, toRow: pos.row };
   }
   if (toX < 0 || toX > COLS - 1) {
-    return { blocked: true, hedge: false, toX: frog.x, toRow: frog.row };
+    return { blocked: true, hedge: false, toX: pos.x, toRow: pos.row };
   }
 
   if (LAND_ROWS.has(toRow)) toX = Math.round(toX);
 
   if (toRow === HOME_ROW && !(HOME_COLS as readonly number[]).includes(toX)) {
-    return { blocked: true, hedge: true, toX: frog.x, toRow: frog.row };
+    return { blocked: true, hedge: true, toX: pos.x, toRow: pos.row };
   }
 
   return { blocked: false, hedge: false, toX, toRow };

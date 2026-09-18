@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 48" width="96" height="48">
+  <!-- Ribbit Rush train engine, faces right, composes with train-car (bible vehicle table:
+       #8E3B46 with #DDDDDD stripe, 6 tiles total across 3 segments). The nose/cab distinguishes
+       it from the plainer train-car segments. -->
+  <!-- body: front face then top face, nose tapering at the right -->
+  <path d="M3 12 L74 12 C84 12 92 17 92 25 C92 33 84 38 74 38 L3 38 Z" fill="#6E2E38"/>
+  <path d="M3 12.5 L74 12.5 C83 12.5 90 17 90 24.5 L3 30 Z" fill="#8E3B46" stroke="#7A3340" stroke-width="1.3"/>
+  <!-- stripe -->
+  <rect x="3" y="27" width="89" height="4.5" fill="#DDDDDD"/>
+  <!-- cab windows -->
+  <rect x="10" y="16" width="16" height="9.5" rx="3" fill="#2B3A55"/>
+  <rect x="30" y="16" width="16" height="9.5" rx="3" fill="#2B3A55"/>
+  <rect x="11.5" y="17.2" width="4.5" height="3" rx="1" fill="#9FB7E6" opacity="0.5"/>
+  <!-- nose headlight -->
+  <circle cx="86" cy="25" r="3" fill="#FFF1A8"/>
+  <!-- rear coupling hint / taillight -->
+  <rect x="2.6" y="20" width="3" height="6" rx="1.5" fill="#FF3B3B"/>
+  <!-- highlight -->
+  <ellipse cx="16" cy="16.5" rx="8" ry="2" fill="#FFFFFF" opacity="0.2"/>
+</svg>

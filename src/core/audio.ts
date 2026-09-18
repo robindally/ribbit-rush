@@ -152,10 +152,25 @@ function buildGraph(context: AudioContext): void {
   musicFilter.frequency.value = 1200;
   musicFilter.Q.value = 0.7;
 
+  // Safety limiter on the master bus (docs/specs/M6-worlds.md audio fix item): the headless
+  // audio-probe (scripts/audio-probe.mjs) found several worlds' simultaneous synth voices
+  // (kick+snare+hat+bass+lead+pad+bell all at once) summing past 0dBFS - world 3 peaked at 1.54
+  // and world 4 at 1.62 (both clip) before this. A DynamicsCompressorNode catches every world's
+  // mix generically; world 3's pad/arpeggio gains are additionally trimmed in
+  // `src/audio/music-data.ts` since compression alone still left its RMS too hot - see
+  // docs/specs/M6-report.md for the full before/after numbers.
+  const limiter = context.createDynamicsCompressor();
+  limiter.threshold.value = -6;
+  limiter.knee.value = 6;
+  limiter.ratio.value = 12;
+  limiter.attack.value = 0.003;
+  limiter.release.value = 0.1;
+
   musicFilter.connect(musicGain);
   musicGain.connect(master);
   sfxGain.connect(master);
-  master.connect(context.destination);
+  master.connect(limiter);
+  limiter.connect(context.destination);
 }
 
 function applyVolumesFromSave(): void {

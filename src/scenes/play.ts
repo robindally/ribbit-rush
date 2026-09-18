@@ -9,21 +9,27 @@ import * as shake from '../fx/shake';
 import * as transitions from '../fx/transitions';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, RIVER_ROWS, ROAD_ROWS, TILE } from '../game/constants';
 import { getWorldTheme } from '../game/themes';
-import { createClassicWorld } from '../game/world';
+import { createCampaignWorld } from '../game/world';
 import type { World } from '../game/world';
 import type { InputAction } from '../game/types';
 import type { Renderer } from '../render/renderer';
 import { buildStaticLayer, drawHomeSlots, drawStaticLayer } from '../render/draw/background';
-import { drawFrog, drawLaneMovers } from '../render/draw/entities';
+import { drawFrog, drawLaneMovers, drawRailSignals } from '../render/draw/entities';
 import { drawAudioHint, drawHud } from '../render/draw/hud';
+import { drawLighting } from '../render/draw/lighting';
+import { drawWeather, updateWeather } from '../render/draw/weather';
 import { createBlinkState, tickBlink, type BlinkState } from '../render/anim';
 import { drawPlatformContactShadows, drawWaterAnimated } from '../render/draw/water';
 import { GameOverScene } from './gameOver';
+import { LevelIntroScene } from './levelIntro';
 import { PauseScene } from './pause';
 
 // A home-landing animation stays visible (icon pulse + lily-pad ring, ART_BIBLE.md section 5) for
 // at most this long; entries older than this are pruned each frame.
 const HOME_ANIM_MAX_S = 0.5;
+// Dev-only "L" then up to two digits level jump (docs/specs/M6-worlds.md section 6). If the
+// second digit doesn't arrive within this window, the single digit typed so far commits.
+const LEVEL_JUMP_COMMIT_MS = 900;
 
 export class PlayScene implements Scene {
   private world: World;
@@ -35,12 +41,16 @@ export class PlayScene implements Scene {
   private lastMultiplier = 1;
   private multiplierPulseT = 1; // >= the pulse window, so it starts settled
   private lastMusicWorld: 1 | 2 | 3 | 4 | 5 | null = null;
+  private introShownForLevel = -1;
+  private levelJumpBuffer: string | null = null;
+  private levelJumpTimer: ReturnType<typeof setTimeout> | null = null;
+  private onLevelJumpKey: ((e: KeyboardEvent) => void) | null = null;
 
   constructor(
     private scenes: SceneManager,
     private save: SaveData,
   ) {
-    this.world = createClassicWorld(1, Date.now());
+    this.world = createCampaignWorld(1, Date.now());
     this.staticLayer = this.buildStaticLayerForCurrentLevel();
     particles.setPalette(getWorldTheme(this.world.level.world).palette);
     if (import.meta.env.DEV) {
@@ -62,6 +72,9 @@ export class PlayScene implements Scene {
           },
           stress: particles.stressFill,
         },
+        // docs/specs/M6-worlds.md: "add window.__rr.jumpToLevel(n) in DEV so the reviewer's
+        // harness (scripts/review.mjs --level N) can start at any level."
+        jumpToLevel: (n: number) => this.world.jumpToLevel(n),
       };
     }
   }
@@ -84,18 +97,68 @@ export class PlayScene implements Scene {
         this.homeAnims.clear();
       }
     });
+    if (import.meta.env.DEV) this.attachLevelJumpKey();
+    // Show the level intro card immediately (docs/specs/M6-worlds.md section 7) rather than
+    // waiting a frame for `update()` to notice the level number - avoids a one-frame flash of
+    // interactive play before the card appears.
+    this.introShownForLevel = this.world.levelNumber;
+    this.scenes.push(
+      new LevelIntroScene(this.scenes, this, this.world.level, this.world.levelNumber),
+    );
   }
 
   exit(): void {
     this.unsubscribe?.();
     this.unsubscribe = null;
     audio.disableAmbientHorn();
+    this.detachLevelJumpKey();
+  }
+
+  /** Dev-only: `L` starts collecting digits, up to two, committing (via `world.jumpToLevel`) once
+   * two digits arrive or `LEVEL_JUMP_COMMIT_MS` passes since the last one - see
+   * docs/specs/M6-worlds.md section 6. Not a gameplay `InputAction` (ARCHITECTURE.md section 5
+   * fixes that union), same precedent as `core/audio.ts`'s raw `M` mute-toggle listener. */
+  private attachLevelJumpKey(): void {
+    this.onLevelJumpKey = (e: KeyboardEvent): void => {
+      if (this.levelJumpBuffer === null) {
+        if (e.code === 'KeyL' || e.key === 'l' || e.key === 'L') this.levelJumpBuffer = '';
+        return;
+      }
+      const digit = /^Digit(\d)$/.exec(e.code)?.[1] ?? (/^\d$/.test(e.key) ? e.key : null);
+      if (digit === null) {
+        if (e.code === 'Escape') this.levelJumpBuffer = null;
+        return;
+      }
+      this.levelJumpBuffer += digit;
+      if (this.levelJumpTimer) clearTimeout(this.levelJumpTimer);
+      if (this.levelJumpBuffer.length >= 2) {
+        this.commitLevelJump();
+      } else {
+        this.levelJumpTimer = setTimeout(() => this.commitLevelJump(), LEVEL_JUMP_COMMIT_MS);
+      }
+    };
+    window.addEventListener('keydown', this.onLevelJumpKey);
+  }
+
+  private detachLevelJumpKey(): void {
+    if (this.onLevelJumpKey) window.removeEventListener('keydown', this.onLevelJumpKey);
+    this.onLevelJumpKey = null;
+    if (this.levelJumpTimer) clearTimeout(this.levelJumpTimer);
+    this.levelJumpTimer = null;
+    this.levelJumpBuffer = null;
+  }
+
+  private commitLevelJump(): void {
+    const n = this.levelJumpBuffer ? parseInt(this.levelJumpBuffer, 10) : NaN;
+    this.levelJumpBuffer = null;
+    this.levelJumpTimer = null;
+    if (Number.isFinite(n) && n >= 1) this.world.jumpToLevel(n);
   }
 
   private buildStaticLayerForCurrentLevel(): HTMLCanvasElement {
     this.staticLayerLevel = this.world.levelNumber;
     const theme = getWorldTheme(this.world.level.world);
-    return buildStaticLayer(theme, this.world.levelNumber);
+    return buildStaticLayer(theme, this.world.level, this.world.levelNumber);
   }
 
   update(dt: number): void {
@@ -104,10 +167,21 @@ export class PlayScene implements Scene {
     tickBlink(this.frogBlink, dt);
 
     if (this.world.level.world !== this.lastMusicWorld) {
-      // Forward-compat for M6: only world 1 is reachable today, but this is what crossfades music
-      // when the level's world changes (docs/specs/M5-audio.md acceptance #3).
+      // Crossfades music the instant the level's world changes (docs/specs/M5-audio.md
+      // acceptance #3; M6 is the first milestone where this actually fires from real gameplay).
       this.lastMusicWorld = this.world.level.world;
       music.play(this.world.level.world);
+    }
+
+    if (this.world.levelNumber !== this.introShownForLevel) {
+      // A new level started this tick (level clear, or a dev jump) - show its intro card
+      // (docs/specs/M6-worlds.md section 7). Checked right after `world.update()` so the level
+      // number is already current, still inside this same PlayScene.update() call (pushing a
+      // scene takes effect for the *next* frame's dispatch, not re-entrantly).
+      this.introShownForLevel = this.world.levelNumber;
+      this.scenes.push(
+        new LevelIntroScene(this.scenes, this, this.world.level, this.world.levelNumber),
+      );
     }
 
     particles.setPalette(getWorldTheme(this.world.level.world).palette);
@@ -115,6 +189,7 @@ export class PlayScene implements Scene {
     shake.update(dt);
     popups.update(dt);
     transitions.update(dt);
+    updateWeather(getWorldTheme(this.world.level.world).weather, dt);
 
     if (this.world.streak.multiplier !== this.lastMultiplier) {
       this.lastMultiplier = this.world.streak.multiplier;
@@ -155,6 +230,10 @@ export class PlayScene implements Scene {
     drawStaticLayer(r, this.staticLayer);
     drawHomeSlots(r, world.homes, this.homeAnims);
 
+    // Fog (world 4) fades movers more than 4 tiles from the frog's column - docs/specs/
+    // M6-worlds.md section 2. `undefined` everywhere else, so drawLaneMovers skips the falloff.
+    const fogFrogCol = theme.weather === 'fog' ? world.frog.x + 0.5 : undefined;
+
     // River rows: animated water (bands + specular) and platform contact shadows under the
     // movers, then the movers themselves. Road rows after (ARCHITECTURE.md section 11).
     for (const row of RIVER_ROWS) {
@@ -162,14 +241,18 @@ export class PlayScene implements Scene {
       if (!lane) continue;
       drawWaterAnimated(r, lane, theme, world.elapsed);
       drawPlatformContactShadows(r, lane, theme, world.elapsed);
-      drawLaneMovers(r, lane, world.elapsed);
+      drawLaneMovers(r, lane, world.elapsed, theme.weather, fogFrogCol);
     }
     for (const row of ROAD_ROWS) {
       const lane = world.laneAt(row);
-      if (lane) drawLaneMovers(r, lane, world.elapsed);
+      if (lane) drawLaneMovers(r, lane, world.elapsed, theme.weather, fogFrogCol);
     }
+    drawRailSignals(r, world.lanes, world.elapsed);
 
     drawFrog(r, world.frog, world.elapsed, this.frogBlink.blinking);
+
+    drawLighting(r, theme, world.lanes);
+    drawWeather(r, theme);
 
     particles.render(r, alpha);
     popups.render(r);

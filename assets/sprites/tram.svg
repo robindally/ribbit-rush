@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 48" width="144" height="48">
+  <!-- Ribbit Rush tram, faces right, 3 tiles (bible vehicle table: #F0D24C, "pantograph line").
+       Rail-bound, so no wheel-poke like road vehicles - it sits low and long instead. -->
+  <!-- front face then top face -->
+  <rect x="3" y="12" width="138" height="26" rx="7" fill="#C7A928"/>
+  <rect x="3" y="12" width="138" height="20" rx="7" fill="#F0D24C" stroke="#D9B930" stroke-width="1.5"/>
+  <!-- window strip -->
+  <g fill="#2B3A55">
+    <rect x="9" y="15.5" width="16" height="11" rx="3"/>
+    <rect x="29" y="15.5" width="16" height="11" rx="3"/>
+    <rect x="49" y="15.5" width="16" height="11" rx="3"/>
+    <rect x="69" y="15.5" width="16" height="11" rx="3"/>
+    <rect x="89" y="15.5" width="16" height="11" rx="3"/>
+    <rect x="109" y="15.5" width="16" height="11" rx="3"/>
+    <rect x="129" y="15.5" width="7" height="11" rx="3"/>
+  </g>
+  <g fill="#9FB7E6" opacity="0.5">
+    <rect x="10.5" y="17" width="5" height="3.4" rx="1"/>
+    <rect x="30.5" y="17" width="5" height="3.4" rx="1"/>
+    <rect x="50.5" y="17" width="5" height="3.4" rx="1"/>
+    <rect x="70.5" y="17" width="5" height="3.4" rx="1"/>
+    <rect x="90.5" y="17" width="5" height="3.4" rx="1"/>
+  </g>
+  <!-- pantograph arm and line along the roof -->
+  <path d="M20 12 L30 6 L114 6 L124 12" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round"/>
+  <line x1="30" y1="6" x2="114" y2="6" stroke="#6B7280" stroke-width="1.5"/>
+  <!-- headlight / taillight -->
+  <rect x="138.5" y="17" width="3" height="5" rx="1.5" fill="#FFF1A8"/>
+  <rect x="138.5" y="26" width="3" height="5" rx="1.5" fill="#FFF1A8"/>
+  <rect x="2.7" y="17" width="3" height="5" rx="1.5" fill="#FF3B3B"/>
+  <rect x="2.7" y="26" width="3" height="5" rx="1.5" fill="#FF3B3B"/>
+  <!-- highlight -->
+  <ellipse cx="14" cy="16" rx="8" ry="2.2" fill="#FFFFFF" opacity="0.2"/>
+</svg>

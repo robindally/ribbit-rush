@@ -24,6 +24,7 @@ export type MoverType =
   | 'motorbike'
   | 'tram'
   | 'train'
+  | 'jetski'
   | 'log'
   | 'turtle'
   | 'croc'
@@ -38,11 +39,25 @@ export interface DiveDef {
   phase: number;
 }
 
+/** Floe crack/sink runtime state (M6: docs/specs/M6-worlds.md section 1). Mutable, owned by the
+ * `MoverDef` it's attached to - unlike `DiveDef` (a pure function of lane time), this depends on
+ * how long *this specific frog attempt* has stood on *this specific floe instance*, so it can't be
+ * derived purely from elapsed time. See `game/lanes.ts` (`stepFloeState`) and `game/world.ts`. */
+export interface FloeState {
+  standingT: number;
+  state: 'solid' | 'cracking' | 'sunk';
+}
+
 export interface MoverDef {
   offset: number; // tiles, in [0, period)
   width: number; // tiles
   type: MoverType;
   dive?: DiveDef; // turtles only
+  /** Overrides the lane's own speed for this mover (M6: jet skis, otters, snakes riding a
+   * different speed than the logs/turtles sharing their river lane). */
+  speed?: number;
+  /** Floes only; mutable runtime state, see `FloeState` above. */
+  floe?: FloeState;
 }
 
 export type LaneKind = 'road' | 'river' | 'rail' | 'median' | 'bank' | 'home';
@@ -103,7 +118,14 @@ export type GameEvent =
   | { type: 'timerLow' }
   | { type: 'tick' }
   | { type: 'powerup'; kind: string }
-  | { type: 'gameOver'; score: number };
+  | { type: 'gameOver'; score: number }
+  /** M6: an oil tile slid the frog one extra tile past its landing spot (docs/LEVELS.md "new
+   * mover and lane rules"). `x`/`row` are the frog's post-slide position, `fromX`/`fromRow` its
+   * pre-slide landing spot - the renderer tweens between them for the 90ms slide. */
+  | { type: 'oilSlide'; x: number; row: number; fromX: number; fromRow: number }
+  /** M6: fires once, 1.5s before a rail lane's train leading edge enters the screen
+   * (docs/LEVELS.md "new mover and lane rules"). */
+  | { type: 'trainWarning'; row: number };
 
 // --- Levels (section 10) ---
 
@@ -115,4 +137,7 @@ export interface LevelDef {
   timeLimit: number; // seconds per frog
   lanes: LaneDef[];
   homes: { crocChance: number; flyChance: number };
+  /** M6: oil decal tiles - hopping onto one slides the frog one extra tile (docs/LEVELS.md "new
+   * mover and lane rules"). */
+  hazardTiles?: { col: number; row: number; type: 'oil' }[];
 }
