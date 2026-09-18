@@ -223,7 +223,9 @@ export type GameEvent =
   | { type: 'score'; delta: number; x: number; row: number; label?: string }
   | { type: 'extraLife' }
   | { type: 'timerLow' }
-  | { type: 'powerup'; kind: string }
+  | { type: 'powerup'; kind: PowerupKind }                                        // M7
+  | { type: 'shieldBroken'; x: number; row: number }                              // M7
+  | { type: 'ladyFrogPickup'; x: number; row: number }                            // M7
   | { type: 'gameOver'; score: number }
   | { type: 'oilSlide'; x: number; row: number; fromX: number; fromRow: number }   // M6
   | { type: 'trainWarning'; row: number };                                        // M6
@@ -232,6 +234,27 @@ export type GameEvent =
 (`bonk`/`land`/`extraLife` above also carry `x`/`row` and a `tick` variant exists in the real
 union - M4/M5 additions this section was never updated for; not repeated here to keep the diff
 focused on M6's own two new variants.)
+
+**M7 additions** (`docs/specs/M7-powerups-scoring.md`):
+
+- `PowerupKind = 'shield' | 'freeze' | 'clock' | 'megahop'` (`game/types.ts`). `powerup`'s `kind`
+  was narrowed from `string` to this - fires on *collection* of a badge.
+- `shieldBroken`: a Bubble Shield cancelled a death; `x`/`row` are the frog's post-rescue position
+  (its pre-hop tile, or the nearest safe platform for a drown/offscreen death). Drives the bubble's
+  "pop with a burst" fx (`fx/particles.ts`) and reuses the `powerup` SFX (`core/audio.ts`).
+  Rewind Clock's own "+10s" popup and Bubble Shield's "pushed back" logic need no new events at
+  all: the former reuses the same `delta: 0` `score`-event trick `world.ts`'s streak-multiplier
+  badge already uses (`fx/popups.ts` needed no changes), and the latter *is* the death cancellation
+  itself, not a separate notification.
+- `ladyFrogPickup`: the frog landed on the lady frog's tile. No dedicated SFX; her `+500` home
+  bonus reuses the ordinary `score` event with a `'+500 LADY FROG'` label, same convention as the
+  fly bonus's `'+200 FLY'`.
+- `game/powerups.ts` owns the pure placement/weighting/timing logic (spawn-point selection,
+  weighted kind pick, Freeze Frame's lane-`dt` scale curve, Bubble Shield's nearest-safe-platform
+  search); `game/world.ts` owns the mutable per-attempt state (`powerup`, `ladyFrog`,
+  `carryingLadyFrog`, `shieldActive`, `megaHopActive`, `freezeElapsed`) and timing integration.
+  `render/draw/powerups.ts` owns every M7 visual (badge, shield bubble, freeze vignette, mega-hop
+  chevron, lady frog on a log/on the frog's back).
 
 `events.ts` exports a typed `on`, `off`, `emit`. Audio, FX, and popups subscribe. Gameplay never
 calls audio or FX directly.
@@ -280,8 +303,14 @@ by file name without extension. Rendering order inside Play: background, water, 
 ## 12. Save
 
 `save.ts` stores a single JSON blob under `ribbit-rush.v1`: `{ hiScore, leaderboard: {name,
-score, world, level}[], settings: { master, music, sfx, reduceMotion, keys }, unlocks: string[] }`.
-Reads are guarded with try/catch and defaults.
+score, world, level, date}[], settings: { master, music, sfx, reduceMotion, keys }, unlocks:
+string[], lastName: string }`. Reads are guarded with try/catch and defaults.
+
+**M7 leaderboard** (`docs/specs/M7-powerups-scoring.md` section 4): `LeaderboardEntry` gained
+`date` (an ISO `YYYY-MM-DD` string). `LEADERBOARD_MAX = 10`; `insertLeaderboardEntry(entries,
+entry, max?)` is a pure sort-descending-and-cap helper, `qualifiesForLeaderboard(entries, score,
+max?)` tells a Game Over whether to show the arcade-style name entry. `lastName` remembers the
+last three-letter name typed, defaulted into the next entry (`scenes/gameOver.ts`).
 
 ## 13. Testing rules
 

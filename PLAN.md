@@ -31,7 +31,19 @@ Design pillars, in priority order:
 - Homes: land a frog in each of 5 slots to clear the level. A crocodile can occupy a slot (death). A fly
   can sit in a slot (bonus).
 - Timer per frog crossing, starting around 30 s and shrinking with level. Lives: 3, plus one every 20,000 pts.
-- Score: 10 per forward hop, 50 per home, 1,000 for all 5, time bonus, fly and lady-frog bonuses.
+- Score (final table, `docs/specs/M7-powerups-scoring.md` section 5 - supersedes any earlier
+  scoring prose in this document):
+
+  | Action | Points |
+  | --- | --- |
+  | Forward hop to a new max row | 10 x multiplier |
+  | Home | 50 x multiplier + 10 per second remaining |
+  | All five homes | 1,000 |
+  | Fly | 200 |
+  | Lady frog home | 500 |
+  | Near-miss | 50 x combo x multiplier |
+  | Power-up collected | 100 |
+  | Extra life | every 20,000 |
 
 ### 2.2 Modern additions
 

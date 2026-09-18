@@ -11,6 +11,7 @@ import { drawAudioHint } from '../render/draw/hud';
 import { drawWaterAnimated } from '../render/draw/water';
 import { drawSpriteImage, type Renderer } from '../render/renderer';
 import { preloadSpriteAt, spriteAt } from '../render/sprites';
+import { LeaderboardScene } from './leaderboard';
 import { PlayScene } from './play';
 
 const LOGO_TEXT = 'RIBBIT RUSH';
@@ -139,10 +140,28 @@ const TITLE_RIVER_LANE: LaneDef = {
   movers: [],
 };
 
+// M7: leaderboard label hit-box (logical px), drawn/hit-tested by `renderLeaderboardLabel`/
+// `hitLeaderboardLabel` below - a fixed rect rather than measured text, since the label's position
+// never changes.
+const LEADERBOARD_LABEL_Y = CANVAS_HEIGHT * 0.86 + 22;
+const LEADERBOARD_LABEL_RECT = {
+  x: CANVAS_WIDTH / 2 - 70,
+  y: LEADERBOARD_LABEL_Y - 12,
+  w: 140,
+  h: 24,
+};
+
 export class TitleScene implements Scene {
   private logo: LogoLayout;
   private elapsed = 0;
   private heroBlink: BlinkState = createBlinkState();
+  private onRawKeyDown: ((e: KeyboardEvent) => void) | null = null;
+  private onRawTouchStart: ((e: TouchEvent) => void) | null = null;
+  /** Set by the raw touchstart watcher the instant a gesture starts inside the leaderboard
+   * label's rect, consumed (and cleared) by `onAction` on the matching touchend-driven hop - see
+   * "Touch, leaderboard tap" below for why this two-step handshake is needed instead of a simple
+   * hit-test inside `onAction` itself. */
+  private pendingLeaderboardTap = false;
 
   constructor(
     private scenes: SceneManager,
@@ -160,12 +179,69 @@ export class TitleScene implements Scene {
     // World 1 patterns at the fixed title tempo, no kick/snare (docs/specs/M5-audio.md section 3).
     music.play(1, { title: true });
     audio.playSfx('croak'); // "title start" (docs/specs/M5-audio.md section 2)
+    this.attachLeaderboardInput();
+  }
+
+  exit(): void {
+    this.detachLeaderboardInput();
   }
 
   update(dt: number): void {
     this.elapsed += dt;
     tickBlink(this.heroBlink, dt);
     transitions.update(dt);
+  }
+
+  // --- Leaderboard entry point (M7 spec section 4: "a Leaderboard screen reachable from the
+  // Title with a key or tap") ---
+  //
+  // Keyboard: 'L' produces no normal InputAction (core/input.ts's KEY_DIR has no L mapping), so a
+  // raw listener - same precedent as PlayScene's dev level-jump key - can't collide with "any key
+  // starts the game" (which only fires for keys the normal pipeline actually recognises).
+  //
+  // Touch, leaderboard tap: a plain tap always synthesises `{type:'hop',dir:'up'}` with no
+  // position (core/input.ts: "a tap hops up"), and that same synthesized action is exactly what
+  // normally starts the game from this screen - so a coordinate-aware "did this tap hit the
+  // label" check can't live inside `onAction` at all. Instead, a *separate* raw `touchstart`
+  // listener (registration order relative to core/input.ts's own listener doesn't matter here,
+  // since this only ever *records* data, it never emits anything) records whether the gesture
+  // that is about to produce a touchend-driven hop started inside the label's rect; `onAction`
+  // then checks that flag instead of starting the game for this one gesture.
+  private attachLeaderboardInput(): void {
+    this.onRawKeyDown = (e: KeyboardEvent): void => {
+      if (e.code === 'KeyL' || e.key === 'l' || e.key === 'L') {
+        if (transitions.isActive()) return;
+        audio.playSfx('uiConfirm');
+        this.scenes.push(new LeaderboardScene(this.scenes, this.save));
+      }
+    };
+    window.addEventListener('keydown', this.onRawKeyDown);
+
+    const canvas = document.getElementById('game');
+    if (canvas instanceof HTMLCanvasElement) {
+      this.onRawTouchStart = (e: TouchEvent): void => {
+        const t = e.changedTouches[0];
+        if (!t) return;
+        const rect = canvas.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return;
+        const lx = ((t.clientX - rect.left) / rect.width) * CANVAS_WIDTH;
+        const ly = ((t.clientY - rect.top) / rect.height) * CANVAS_HEIGHT;
+        const b = LEADERBOARD_LABEL_RECT;
+        this.pendingLeaderboardTap = lx >= b.x && lx <= b.x + b.w && ly >= b.y && ly <= b.y + b.h;
+      };
+      canvas.addEventListener('touchstart', this.onRawTouchStart, { passive: true });
+    }
+  }
+
+  private detachLeaderboardInput(): void {
+    if (this.onRawKeyDown) window.removeEventListener('keydown', this.onRawKeyDown);
+    this.onRawKeyDown = null;
+    if (this.onRawTouchStart) {
+      const canvas = document.getElementById('game');
+      canvas?.removeEventListener('touchstart', this.onRawTouchStart);
+    }
+    this.onRawTouchStart = null;
+    this.pendingLeaderboardTap = false;
   }
 
   render(r: Renderer, _alpha: number): void {
@@ -228,6 +304,15 @@ export class TitleScene implements Scene {
       outline: '#1B2A1D',
     });
 
+    // Leaderboard entry point (M7 spec section 4) - hit-tested against LEADERBOARD_LABEL_RECT.
+    r.text('LEADERBOARD (L)', CANVAS_WIDTH / 2, LEADERBOARD_LABEL_Y, {
+      size: 14,
+      weight: 600,
+      align: 'center',
+      color: '#FFF7E6',
+      outline: '#1B2A1D',
+    });
+
     const pulse = 0.6 + 0.4 * Math.abs(Math.sin(this.elapsed * Math.PI * 1.4));
     r.ctx.save();
     r.ctx.globalAlpha = pulse;
@@ -246,6 +331,12 @@ export class TitleScene implements Scene {
 
   onAction(_a: InputAction): void {
     if (transitions.isActive()) return; // ignore input mid-wipe
+    if (this.pendingLeaderboardTap) {
+      this.pendingLeaderboardTap = false;
+      audio.playSfx('uiConfirm');
+      this.scenes.push(new LeaderboardScene(this.scenes, this.save));
+      return;
+    }
     audio.playSfx('uiConfirm');
     transitions.play(() => this.scenes.replace(new PlayScene(this.scenes, this.save)));
   }

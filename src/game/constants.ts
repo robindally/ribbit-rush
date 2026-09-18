@@ -40,6 +40,22 @@ export const START_LIVES = 3;
 export const HOME_HAZARD_MIN_S = 4;
 export const HOME_HAZARD_MAX_S = 8;
 
+// Power-ups (M7: docs/specs/M7-powerups-scoring.md section 1)
+export const POWERUP_MIN_LEVEL = 2; // no power-ups before this level
+export const POWERUP_SPAWN_CHANCE = 0.25; // rolled once at the start of each attempt
+export const POWERUP_DESPAWN_S = 12;
+export const POWERUP_COLLECT_RADIUS = 0.5; // tiles, centre-to-centre
+export const POWERUP_COLLECT_SCORE = 100;
+export const FREEZE_DURATION_S = 3; // lanes fully stopped
+export const FREEZE_RESUME_S = 0.5; // then ramp back up to full speed
+export const REWIND_CLOCK_BONUS_S = 10;
+export const MEGA_HOP_ARC_TILES = 0.7; // vs. the normal 0.4 tile hop arc
+
+// Lady frog (M7: docs/specs/M7-powerups-scoring.md section 2)
+export const LADY_FROG_MIN_LEVEL = 3;
+export const LADY_FROG_SPAWN_CHANCE = 0.2; // rolled once at the start of each attempt
+export const LADY_FROG_SCORE = 500;
+
 // Near-miss (docs/specs/M4-juice.md section 5)
 export const NEAR_MISS_WATCH_S = 0.15; // how long the vacated tile is watched after a hop lands
 export const NEAR_MISS_COMBO_WINDOW_S = 2; // consecutive near-misses within this chain the combo

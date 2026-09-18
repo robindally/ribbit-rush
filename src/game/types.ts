@@ -62,6 +62,10 @@ export interface MoverDef {
 
 export type LaneKind = 'road' | 'river' | 'rail' | 'median' | 'bank' | 'home';
 
+// --- Power-ups (M7: docs/specs/M7-powerups-scoring.md section 1) ---
+
+export type PowerupKind = 'shield' | 'freeze' | 'clock' | 'megahop';
+
 export interface LaneDef {
   row: number;
   kind: LaneKind;
@@ -117,7 +121,14 @@ export type GameEvent =
   | { type: 'extraLife'; x: number; row: number }
   | { type: 'timerLow' }
   | { type: 'tick' }
-  | { type: 'powerup'; kind: string }
+  /** Fired when a power-up badge is collected (M7: docs/specs/M7-powerups-scoring.md section 1). */
+  | { type: 'powerup'; kind: PowerupKind }
+  /** M7: a Bubble Shield cancelled a death - the frog was pushed back to `x`/`row` (its pre-hop
+   * tile, or the nearest safe platform if the death was a drown/offscreen). Drives the shield's
+   * "pop with a burst" fx and reuses the `powerup` SFX. */
+  | { type: 'shieldBroken'; x: number; row: number }
+  /** M7: the frog landed on the lady frog's tile and picked her up (now riding its back). */
+  | { type: 'ladyFrogPickup'; x: number; row: number }
   | { type: 'gameOver'; score: number }
   /** M6: an oil tile slid the frog one extra tile past its landing spot (docs/LEVELS.md "new
    * mover and lane rules"). `x`/`row` are the frog's post-slide position, `fromX`/`fromRow` its

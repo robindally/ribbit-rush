@@ -677,6 +677,11 @@ gameEvents.on('tick', () => playSfx('tick'));
 
 gameEvents.on('powerup', (e) => playSfx(e.kind === 'freeze' ? 'freeze' : 'powerup'));
 
+// M7: Bubble Shield "pops with a burst" when it cancels a death - reuses the same generic
+// power-up chime rather than a new SFX recipe (docs/specs/M7-powerups-scoring.md doesn't call for
+// a distinct sound here, and 'powerup' already reads as "a good thing just happened").
+gameEvents.on('shieldBroken', (e) => playSfx('powerup', { col: e.x }));
+
 // --- Dev hook (docs/specs/M5-audio.md: "expose window.__rr.audio in dev with setVolumes and a
 // list of SFX names so the reviewer can trigger them") ---
 

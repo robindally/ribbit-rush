@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Mega Hop power-up badge. ART_BIBLE.md section 3: "#8BEA7B double chevron on white ring". -->
+  <circle cx="24" cy="24" r="19" fill="#FFFFFF"/>
+  <circle cx="24" cy="24" r="16" fill="#8BEA7B"/>
+  <g fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="16,29 24,21 32,29"/>
+    <polyline points="16,21 24,13 32,21"/>
+  </g>
+</svg>

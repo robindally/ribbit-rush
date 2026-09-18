@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Rewind Clock power-up badge. ART_BIBLE.md section 3: "#FFC83D clock on white ring". -->
+  <circle cx="24" cy="24" r="19" fill="#FFFFFF"/>
+  <circle cx="24" cy="24" r="16" fill="#FFC83D"/>
+  <circle cx="24" cy="24" r="10.5" fill="none" stroke="#FFFFFF" stroke-width="2.2"/>
+  <circle cx="24" cy="15.2" r="1.2" fill="#FFFFFF"/>
+  <g stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round">
+    <line x1="24" y1="24" x2="24" y2="17.5"/>
+    <line x1="24" y1="24" x2="28.5" y2="26.5"/>
+  </g>
+</svg>

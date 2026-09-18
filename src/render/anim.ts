@@ -34,9 +34,13 @@ export function frogHopScale(hopT: number): ScaleXY {
   return { scaleX: 1, scaleY };
 }
 
-/** Hop arc height, in tiles (0.4 tile at the apex, hopT = 0.5). */
-export function frogHopArc(hopT: number): number {
-  return Math.sin(Math.PI * clamp(hopT, 0, 1)) * 0.4;
+const NORMAL_HOP_ARC_TILES = 0.4;
+
+/** Hop arc height, in tiles (0.4 tile at the apex, hopT = 0.5 by default). `peakTiles` lets a
+ * caller draw a taller arc for a Mega Hop (M7: docs/specs/M7-powerups-scoring.md section 1, "a
+ * higher arc (0.7 tile)") without touching every other caller. */
+export function frogHopArc(hopT: number, peakTiles: number = NORMAL_HOP_ARC_TILES): number {
+  return Math.sin(Math.PI * clamp(hopT, 0, 1)) * peakTiles;
 }
 
 /** Ground shadow scale: full size on the ground, shrinks to 70% at the hop's apex. */

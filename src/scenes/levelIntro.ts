@@ -6,6 +6,7 @@
 
 import type { Scene, SceneManager } from '../core/loop';
 import * as audio from '../core/audio';
+import * as transitions from '../fx/transitions';
 import { CANVAS_HEIGHT, CANVAS_WIDTH, TILE } from '../game/constants';
 import { getWorldTheme } from '../game/themes';
 import type { InputAction, LevelDef } from '../game/types';
@@ -48,13 +49,24 @@ export class LevelIntroScene implements Scene {
     private levelNumber: number,
   ) {}
 
-  update(_dt: number): void {
+  update(dt: number): void {
     // Frozen underneath, like PauseScene - the timer/traffic shouldn't run while the card is up.
-    this.t += _dt;
+    // Still drives fx/transitions.ts (M7 fix-up): PlayScene.enter() can push this card while the
+    // Title -> Play iris is still mid-"opening" (the card can appear within the same frame the
+    // level starts), and this module - unlike every scene that calls `transitions.render` - never
+    // advanced it, freezing the transition's own timer until the card popped back to PlayScene,
+    // where the leftover animation would then visibly resume on top of real gameplay. Since a
+    // transition can only ever be closing *into* a scene swap that already happened by the time
+    // any card exists, this always reads as the 'opening' phase finishing out, never a fresh wipe.
+    this.t += dt;
     if (this.t >= INTRO_DURATION_S) this.dismiss();
+    transitions.update(dt);
   }
 
   render(r: Renderer, alpha: number): void {
+    // `this.under` is always PlayScene, whose own render() already ends with
+    // `transitions.render(r)` - delegating here (rather than also calling it directly) avoids
+    // drawing the transition mask twice in the same frame.
     this.under.render(r, alpha);
 
     r.ctx.fillStyle = 'rgba(10, 10, 20, 0.55)';

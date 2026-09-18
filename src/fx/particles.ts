@@ -365,6 +365,15 @@ gameEvents.on('bonk', (e) => {
   bonk(p.x, p.y);
 });
 
+// M7: Bubble Shield "pops with a burst" (docs/specs/M7-powerups-scoring.md section 1) - a double
+// ring in the shield's own blue (ART_BIBLE.md section 3: "Bubble Shield #3E9CE6 bubble").
+const SHIELD_BLUE = '#3E9CE6';
+gameEvents.on('shieldBroken', (e) => {
+  const p = tileToPx(e.x, e.row);
+  ripple(p.x, p.y, SHIELD_BLUE);
+  ripple(p.x, p.y, SHIELD_BLUE);
+});
+
 // --- Simulation + render ---
 
 export function update(dt: number): void {

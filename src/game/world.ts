@@ -12,16 +12,40 @@ import {
   HOME_HAZARD_MIN_S,
   HOME_ROW,
   HOP_S,
+  LADY_FROG_MIN_LEVEL,
+  LADY_FROG_SPAWN_CHANCE,
   NEAR_MISS_COMBO_WINDOW_S,
   NEAR_MISS_SCORE_PER_COMBO,
   NEAR_MISS_WATCH_S,
+  POWERUP_COLLECT_RADIUS,
+  POWERUP_DESPAWN_S,
+  POWERUP_MIN_LEVEL,
+  POWERUP_SPAWN_CHANCE,
+  REWIND_CLOCK_BONUS_S,
   START_LIVES,
 } from './constants';
 import { killerHitType, platformAt, vehicleHits } from './collision';
-import { bufferHop, computeHopTarget, consumeHop, createFrog, createHopBuffer } from './frog';
+import {
+  bufferHop,
+  computeHopTarget,
+  computeMegaHopTarget,
+  consumeHop,
+  createFrog,
+  createHopBuffer,
+} from './frog';
 import type { HopBuffer } from './frog';
 import { getLevel } from './level';
 import { isTrainWarningActive, stepFloeState, stepLane } from './lanes';
+import {
+  chooseLadyFrogSpawn,
+  choosePowerupSpawn,
+  freezeLaneTimeScale,
+  isFreezeActive,
+  nearestSafePlatformX,
+  pickPowerupKind,
+  ridingX,
+} from './powerups';
+import type { RideRef } from './powerups';
 import {
   advanceStreak,
   createStreakState,
@@ -29,10 +53,21 @@ import {
   flyScore,
   forwardHopScore,
   homeScore,
+  ladyFrogScore,
   levelClearScore,
+  powerupCollectScore,
 } from './scoring';
-import type { StreakHopKind, StreakState } from './scoring';
-import type { DeathCause, Dir, Frog, HomeSlotState, LaneDef, LevelDef, MoverType } from './types';
+import type { RunStats, StreakHopKind, StreakState } from './scoring';
+import type {
+  DeathCause,
+  Dir,
+  Frog,
+  HomeSlotState,
+  LaneDef,
+  LevelDef,
+  MoverType,
+  PowerupKind,
+} from './types';
 
 /** Maps a killer mover's type to the death it inflicts. `snake` reuses the `DeathCause` value the
  * type already had (M3 report: "snake unreachable until M6 wires up the hazard" - this closes that
@@ -84,6 +119,23 @@ export class World {
   nearMissCount = 0;
   streak: StreakState = createStreakState();
 
+  // --- Power-ups and lady frog (M7: docs/specs/M7-powerups-scoring.md sections 1-2) ---
+
+  /** The one power-up currently on the field, or null. Public so render/ can read its
+   * kind/row/x directly (see `render/draw/powerups.ts`) and the dev hook can force one. */
+  powerup: { kind: PowerupKind; ageS: number; row: number; x: number; ride: RideRef | null } | null =
+    null;
+  /** The lady frog on the field (not yet picked up), or null. */
+  ladyFrog: { row: number; x: number; ride: RideRef } | null = null;
+  /** True once she's been picked up - rides the frog's back until home or a death. */
+  carryingLadyFrog = false;
+  /** Bubble Shield armed: the next `die()` call is cancelled instead of killing the frog. */
+  shieldActive = false;
+  /** Mega Hop armed: the next forward ('up') hop covers 2 tiles instead of 1. */
+  megaHopActive = false;
+  /** Seconds since Freeze Frame started, or null when inactive - see `advanceFreeze`. */
+  freezeElapsed: number | null = null;
+
   private rng: Rng;
   private hopBuffer: HopBuffer = createHopBuffer();
   private crocState: HazardState | null = null;
@@ -93,6 +145,14 @@ export class World {
   private nearMissWatch: { row: number; x: number; expiresAt: number } | null = null;
   private timerLowFired = false;
   private tickAccumulator = 0;
+
+  // --- Run statistics (M7 section 3), never reset by `startAttempt`/`respawnFrogOnly` - these
+  // aggregate across the whole run, not just the current attempt. See `getRunStats()`.
+  private homesFilledTotal = 0;
+  private deathsByCause: Partial<Record<DeathCause, number>> = {};
+  private bestNearMissCombo = 0;
+  private bestStreakMultiplier = 1;
+  private powerupsCollected = 0;
   /** Rows currently inside their train's 1.5s crossing-warning window, so `trainWarning` fires
    * once per approach rather than every tick - reset the instant the warning window closes so the
    * next lap can warn again (M6: docs/LEVELS.md "new mover and lane rules"). */
@@ -106,6 +166,7 @@ export class World {
     this.frog = createFrog();
     this.homes = HOME_COLS.map(() => null);
     this.timeLeft = level.timeLimit;
+    this.startAttempt();
   }
 
   laneAt(row: number): LaneDef | undefined {
@@ -132,7 +193,10 @@ export class World {
     }
 
     this.elapsed += dt;
-    for (const lane of this.lanes) stepLane(lane, dt);
+    const laneTimeScale = this.advanceFreeze(dt);
+    for (const lane of this.lanes) stepLane(lane, dt * laneTimeScale);
+    this.updatePowerupField(dt);
+    this.updateLadyFrogField();
     this.updateHomeHazards(dt);
     this.updateNearMissWatch();
     this.updateTrainWarnings();
@@ -174,17 +238,172 @@ export class World {
 
     if (this.frog.state === 'idle') {
       this.resolveRowEffects(dt);
+      this.checkPickups();
     }
+  }
+
+  // --- Power-ups and lady frog (M7) ---
+
+  /** Advances an active Freeze Frame and returns this frame's lane `dt` multiplier (spec section
+   * 1: "All lanes stop for 3s, then resume over 0.5s. Timer keeps running") - 1 when no freeze is
+   * active. Only the value fed into `stepLane` uses this; the frog's own hop timer and the level
+   * countdown always run at full speed, so the player can still act while lanes are frozen. */
+  private advanceFreeze(dt: number): number {
+    if (this.freezeElapsed === null) return 1;
+    this.freezeElapsed += dt;
+    const scale = freezeLaneTimeScale(this.freezeElapsed);
+    if (!isFreezeActive(this.freezeElapsed)) this.freezeElapsed = null;
+    return scale;
+  }
+
+  /** Re-glues a platform-riding power-up to its platform's live (possibly frozen) position, and
+   * ages its 12s despawn timer using real time (unaffected by Freeze Frame - a "field timer", not
+   * lane motion). */
+  private updatePowerupField(dt: number): void {
+    const p = this.powerup;
+    if (!p) return;
+    if (p.ride) {
+      const lane = this.laneAt(p.row);
+      if (lane) p.x = ridingX(lane, p.ride);
+    }
+    p.ageS += dt;
+    if (p.ageS >= POWERUP_DESPAWN_S) this.powerup = null;
+  }
+
+  private updateLadyFrogField(): void {
+    const l = this.ladyFrog;
+    if (!l) return;
+    const lane = this.laneAt(l.row);
+    if (lane) l.x = ridingX(lane, l.ride);
+  }
+
+  /** Collection/pickup by proximity (spec: "collect by landing on its tile, centre within 0.5
+   * tile") - checked every idle step (not only the instant of landing) so a power-up/lady-frog
+   * riding the very platform the frog is already standing on still gets picked up once it drifts
+   * close enough. */
+  private checkPickups(): void {
+    const frog = this.frog;
+    if (frog.state !== 'idle') return;
+
+    const p = this.powerup;
+    if (p && frog.row === p.row && Math.abs(frog.x - p.x) <= POWERUP_COLLECT_RADIUS) {
+      this.collectPowerup(p.kind);
+    }
+
+    const l = this.ladyFrog;
+    if (l && frog.row === l.row && Math.abs(frog.x - l.x) <= POWERUP_COLLECT_RADIUS) {
+      this.pickUpLadyFrog();
+    }
+  }
+
+  private collectPowerup(kind: PowerupKind): void {
+    this.powerup = null;
+    this.powerupsCollected += 1;
+    const delta = powerupCollectScore();
+    this.addScore(delta, `+${delta}`);
+    gameEvents.emit({ type: 'powerup', kind });
+    this.applyPowerupEffect(kind);
+  }
+
+  private applyPowerupEffect(kind: PowerupKind): void {
+    switch (kind) {
+      case 'shield':
+        this.shieldActive = true;
+        break;
+      case 'freeze':
+        this.freezeElapsed = 0;
+        break;
+      case 'clock':
+        this.timeLeft = Math.min(this.level.timeLimit, this.timeLeft + REWIND_CLOCK_BONUS_S);
+        // Big "+10s" popup (spec section 1) - a delta:0 score event, the same trick `onLanded`
+        // already uses for the streak-multiplier badge popup, so `fx/popups.ts` needs no changes.
+        gameEvents.emit({
+          type: 'score',
+          delta: 0,
+          x: this.frog.x,
+          row: this.frog.row,
+          label: '+10s',
+        });
+        break;
+      case 'megahop':
+        this.megaHopActive = true;
+        break;
+    }
+  }
+
+  private pickUpLadyFrog(): void {
+    this.ladyFrog = null;
+    this.carryingLadyFrog = true;
+    gameEvents.emit({ type: 'ladyFrogPickup', x: this.frog.x, row: this.frog.row });
+  }
+
+  /** Rolls this attempt's power-up/lady-frog spawns (spec: "at the start of each attempt roll
+   * 25%"/"20% per attempt") and clears every per-attempt power-up state - called once per fresh
+   * attempt (constructor, and the end of `respawnFrogOnly`/thus `loadLevel`). Never touches the
+   * run-level stats fields (`homesFilledTotal` etc.), which aggregate across the whole run. */
+  private startAttempt(): void {
+    this.powerup = null;
+    this.ladyFrog = null;
+    this.carryingLadyFrog = false;
+    this.shieldActive = false;
+    this.megaHopActive = false;
+    this.freezeElapsed = null;
+
+    if (this.levelNumber >= POWERUP_MIN_LEVEL && this.rng.chance(POWERUP_SPAWN_CHANCE)) {
+      this.spawnPowerup();
+    }
+    if (this.levelNumber >= LADY_FROG_MIN_LEVEL && this.rng.chance(LADY_FROG_SPAWN_CHANCE)) {
+      this.spawnLadyFrog();
+    }
+  }
+
+  private spawnPowerup(): void {
+    const kind = pickPowerupKind(this.rng);
+    const spawn = choosePowerupSpawn(this.lanes, this.rng, this.elapsed);
+    this.powerup = { kind, ageS: 0, row: spawn.row, x: spawn.x, ride: spawn.ride };
+  }
+
+  private spawnLadyFrog(): void {
+    const spawn = chooseLadyFrogSpawn(this.lanes, this.rng, this.elapsed);
+    if (spawn && spawn.ride) this.ladyFrog = { row: spawn.row, x: spawn.x, ride: spawn.ride };
+  }
+
+  /** Dev-only (docs/specs/M7-powerups-scoring.md: "add window.__rr.powerups with a spawn(kind)
+   * helper so the reviewer can force each kind" - see `src/scenes/play.ts`'s dev hook). Places a
+   * power-up on the field immediately, bypassing the level gate and the 25% roll. */
+  forceSpawnPowerup(kind: PowerupKind): void {
+    const spawn = choosePowerupSpawn(this.lanes, this.rng, this.elapsed);
+    this.powerup = { kind, ageS: 0, row: spawn.row, x: spawn.x, ride: spawn.ride };
+  }
+
+  /** Dev-only: applies a power-up's effect immediately, as if just collected (no score/field
+   * change) - lets the reviewer see Freeze/Shield/Mega Hop's effect without having to walk over
+   * a spawned badge first. */
+  forceActivatePowerup(kind: PowerupKind): void {
+    this.applyPowerupEffect(kind);
+  }
+
+  /** Dev-only: places the lady frog on a random log immediately. */
+  forceSpawnLadyFrog(): void {
+    this.spawnLadyFrog();
+  }
+
+  /** Dev-only: skips straight to "carrying" the lady frog, bypassing pickup. */
+  forceCarryLadyFrog(): void {
+    this.ladyFrog = null;
+    this.carryingLadyFrog = true;
   }
 
   // --- Hop lifecycle ---
 
   private tryHop(dir: Dir): void {
-    const target = computeHopTarget(this.frog, dir);
+    const usingMegaHop = this.megaHopActive && dir === 'up';
+    const target = usingMegaHop ? computeMegaHopTarget(this.frog) : computeHopTarget(this.frog, dir);
     if (target.blocked) {
       gameEvents.emit({ type: 'bonk', x: this.frog.x, row: this.frog.row });
-      return;
+      return; // Mega Hop stays armed on a blocked attempt - not consumed until it actually lands.
     }
+    if (usingMegaHop) this.megaHopActive = false;
 
     this.frog.fromX = this.frog.x;
     this.frog.fromRow = this.frog.row;
@@ -210,6 +429,7 @@ export class World {
       frog.facing === 'up' ? 'forward' : frog.facing === 'down' ? 'backward' : 'side';
     const prevMultiplier = this.streak.multiplier;
     this.streak = advanceStreak(this.streak, kind, this.elapsed);
+    this.bestStreakMultiplier = Math.max(this.bestStreakMultiplier, this.streak.multiplier);
     if (this.streak.multiplier > prevMultiplier) {
       gameEvents.emit({
         type: 'score',
@@ -274,6 +494,7 @@ export class World {
     const combo = advanceNearMissCombo(this.nearMissState, this.elapsed);
     this.nearMissState = combo;
     this.nearMissCount += 1;
+    this.bestNearMissCombo = Math.max(this.bestNearMissCombo, combo.combo);
     gameEvents.emit({ type: 'nearMiss', combo: combo.combo });
     const delta = NEAR_MISS_SCORE_PER_COMBO * combo.combo * this.streak.multiplier;
     this.addScore(delta, `CLOSE CALL! +${delta}`);
@@ -446,6 +667,14 @@ export class World {
     }
 
     this.homes[slot] = 'frog';
+    this.homesFilledTotal += 1;
+
+    if (this.carryingLadyFrog) {
+      this.carryingLadyFrog = false;
+      const ladyDelta = ladyFrogScore();
+      this.addScore(ladyDelta, `+${ladyDelta} LADY FROG`);
+    }
+
     const bonus = this.timeLeft;
     const homeDelta = homeScore(bonus) * this.streak.multiplier;
     this.addScore(homeDelta, `+${homeDelta}`);
@@ -501,12 +730,50 @@ export class World {
 
   private die(cause: DeathCause): void {
     if (this.frog.state === 'dying' || this.frog.state === 'dead') return;
+    if (this.shieldActive) {
+      this.consumeShield();
+      return;
+    }
+    this.deathsByCause[cause] = (this.deathsByCause[cause] ?? 0) + 1;
     this.frog.state = 'dying';
     this.frog.deathCause = cause;
     this.frog.stateT = 0;
     this.streak = createStreakState(); // death resets the streak (spec section 6)
     this.nearMissWatch = null;
+    this.carryingLadyFrog = false; // dropped on death (M7 spec section 2)
     gameEvents.emit({ type: 'death', cause, x: this.frog.x, row: this.frog.row });
+  }
+
+  /** Bubble Shield rescue (M7 spec section 1): cancels the death that would otherwise have
+   * happened, pushing the frog back to the tile it hopped from - or, if the current row is a
+   * river (a drown/offscreen death), the nearest currently-safe platform in that same lane. Fully
+   * resets the frog back to a settled 'idle' state so no further hop/landing logic re-runs this
+   * tick. */
+  private consumeShield(): void {
+    this.shieldActive = false;
+    const frog = this.frog;
+    const lane = this.laneAt(frog.row);
+
+    let targetX = frog.fromX;
+    let targetRow = frog.fromRow;
+    if (lane && lane.kind === 'river') {
+      const nearest = nearestSafePlatformX(lane, frog.x, this.elapsed);
+      if (nearest !== null) {
+        targetX = nearest;
+        targetRow = frog.row;
+      }
+    }
+
+    frog.x = targetX;
+    frog.row = targetRow;
+    frog.fromX = targetX;
+    frog.fromRow = targetRow;
+    frog.toX = targetX;
+    frog.toRow = targetRow;
+    frog.hopT = 1;
+    frog.state = 'idle';
+    frog.stateT = 0;
+    gameEvents.emit({ type: 'shieldBroken', x: targetX, row: targetRow });
   }
 
   private afterDeath(): void {
@@ -535,6 +802,7 @@ export class World {
       const value = this.homes[i];
       if (value === 'croc' || value === 'fly') this.homes[i] = null;
     }
+    this.startAttempt(); // M7: fresh per-attempt power-up/lady-frog roll
   }
 
   private loadNextLevel(): void {
@@ -568,6 +836,22 @@ export class World {
       this.lives += 1;
       gameEvents.emit({ type: 'extraLife', x: this.frog.x, row: this.frog.row });
     }
+  }
+
+  /** A snapshot of this run's statistics (M7 spec section 3), shown on the Game Over card. */
+  getRunStats(): RunStats {
+    return {
+      score: this.score,
+      levelReached: this.levelNumber,
+      world: this.level.world,
+      homesFilled: this.homesFilledTotal,
+      deathsByCause: { ...this.deathsByCause },
+      nearMisses: this.nearMissCount,
+      bestCombo: this.bestNearMissCombo,
+      bestMultiplier: this.bestStreakMultiplier,
+      powerupsCollected: this.powerupsCollected,
+      timePlayedS: this.elapsed,
+    };
   }
 }
 

@@ -7,13 +7,16 @@ import {
   FORWARD_HOP_SCORE,
   HOME_SCORE,
   HOME_TIME_BONUS_PER_S,
+  LADY_FROG_SCORE,
   LEVEL_CLEAR_SCORE,
+  POWERUP_COLLECT_SCORE,
   START_LIVES,
   STREAK_GAP_S,
   STREAK_HOPS_PER_TIER,
   STREAK_IDLE_RESET_S,
   STREAK_MULTIPLIER_CAP,
 } from './constants';
+import type { DeathCause } from './types';
 
 export { START_LIVES };
 
@@ -35,6 +38,17 @@ export function levelClearScore(): number {
 /** +200 for landing on a fly-occupied home slot. */
 export function flyScore(): number {
   return FLY_SCORE;
+}
+
+/** +500 for reaching home while carrying the lady frog (M7: docs/specs/M7-powerups-scoring.md
+ * section 2). */
+export function ladyFrogScore(): number {
+  return LADY_FROG_SCORE;
+}
+
+/** +100 for collecting any power-up badge (M7 section 5's scoring table). */
+export function powerupCollectScore(): number {
+  return POWERUP_COLLECT_SCORE;
 }
 
 /** How many extra lives were crossed going from `prevScore` to `nextScore` (every 20,000 pts). */
@@ -119,4 +133,45 @@ export function advanceStreak(prev: StreakState, kind: StreakHopKind, now: numbe
 
   const streak = rescuedSide || continuedChain ? prev.streak + 1 : 1;
   return { streak, multiplier: streakMultiplier(streak), lastLandAt: now, pendingSideAt: null };
+}
+
+// --- Run statistics (M7: docs/specs/M7-powerups-scoring.md section 3) ---
+//
+// `World` owns one `RunStats`-shaped snapshot (assembled by `getRunStats()`) for the whole run
+// (every attempt/life, not reset on respawn - only score/level/near-misses/time are meaningful
+// across a full run). Shown on the Game Over card (M8 restyles it).
+
+export interface RunStats {
+  score: number;
+  /** Highest campaign level number reached this run. */
+  levelReached: number;
+  /** The world (1-5) that level belongs to (post-15 loop levels all report world 5). */
+  world: 1 | 2 | 3 | 4 | 5;
+  /** Total home slots filled (not just the current level's). */
+  homesFilled: number;
+  /** Death count by cause; a cancelled (shield-blocked) death is never counted. */
+  deathsByCause: Partial<Record<DeathCause, number>>;
+  /** Total near-miss triggers (M4). */
+  nearMisses: number;
+  /** Peak near-miss combo reached this run. */
+  bestCombo: number;
+  /** Peak hop-streak multiplier reached this run (1-4, M4). */
+  bestMultiplier: number;
+  powerupsCollected: number;
+  timePlayedS: number;
+}
+
+export function createRunStats(): RunStats {
+  return {
+    score: 0,
+    levelReached: 1,
+    world: 1,
+    homesFilled: 0,
+    deathsByCause: {},
+    nearMisses: 0,
+    bestCombo: 0,
+    bestMultiplier: 1,
+    powerupsCollected: 0,
+    timePlayedS: 0,
+  };
 }

@@ -9,14 +9,23 @@ import * as shake from '../fx/shake';
 import * as transitions from '../fx/transitions';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, RIVER_ROWS, ROAD_ROWS, TILE } from '../game/constants';
 import { getWorldTheme } from '../game/themes';
+import { freezeLaneTimeScale, POWERUP_KINDS } from '../game/powerups';
 import { createCampaignWorld } from '../game/world';
 import type { World } from '../game/world';
-import type { InputAction } from '../game/types';
+import type { InputAction, PowerupKind } from '../game/types';
 import type { Renderer } from '../render/renderer';
 import { buildStaticLayer, drawHomeSlots, drawStaticLayer } from '../render/draw/background';
 import { drawFrog, drawLaneMovers, drawRailSignals } from '../render/draw/entities';
 import { drawAudioHint, drawHud } from '../render/draw/hud';
 import { drawLighting } from '../render/draw/lighting';
+import {
+  drawFreezeVignette,
+  drawLadyFrogOnBack,
+  drawLadyFrogOnField,
+  drawMegaHopChevron,
+  drawPowerupBadge,
+  drawShieldBubble,
+} from '../render/draw/powerups';
 import { drawWeather, updateWeather } from '../render/draw/weather';
 import { createBlinkState, tickBlink, type BlinkState } from '../render/anim';
 import { drawPlatformContactShadows, drawWaterAnimated } from '../render/draw/water';
@@ -75,6 +84,16 @@ export class PlayScene implements Scene {
         // docs/specs/M6-worlds.md: "add window.__rr.jumpToLevel(n) in DEV so the reviewer's
         // harness (scripts/review.mjs --level N) can start at any level."
         jumpToLevel: (n: number) => this.world.jumpToLevel(n),
+        // docs/specs/M7-powerups-scoring.md: "add window.__rr.powerups with a spawn(kind) helper
+        // so the reviewer can force each kind." `activate`/`carryLadyFrog` are extra conveniences
+        // for screenshotting an effect without needing the frog to walk over the badge first.
+        powerups: {
+          kinds: POWERUP_KINDS,
+          spawn: (kind: PowerupKind) => this.world.forceSpawnPowerup(kind),
+          activate: (kind: PowerupKind) => this.world.forceActivatePowerup(kind),
+          spawnLadyFrog: () => this.world.forceSpawnLadyFrog(),
+          carryLadyFrog: () => this.world.forceCarryLadyFrog(),
+        },
       };
     }
   }
@@ -86,8 +105,9 @@ export class PlayScene implements Scene {
     this.unsubscribe = gameEvents.onAny((e) => {
       if (e.type === 'gameOver') {
         const frog = this.world.frog;
+        const stats = this.world.getRunStats();
         transitions.play(
-          () => this.scenes.replace(new GameOverScene(this.scenes, this.save, e.score)),
+          () => this.scenes.replace(new GameOverScene(this.scenes, this.save, e.score, stats)),
           (frog.x + 0.5) * TILE,
           frog.row * TILE + TILE / 2,
         );
@@ -249,10 +269,22 @@ export class PlayScene implements Scene {
     }
     drawRailSignals(r, world.lanes, world.elapsed);
 
+    // M7: power-up badge and the lady frog (on her log) ride under the frog, drawn with the other
+    // river/road-riding things so the frog visibly lands on top of them.
+    if (world.powerup) drawPowerupBadge(r, world.powerup, world.elapsed);
+    if (world.ladyFrog) drawLadyFrogOnField(r, world.ladyFrog, world.elapsed);
+
     drawFrog(r, world.frog, world.elapsed, this.frogBlink.blinking);
+
+    if (world.carryingLadyFrog) drawLadyFrogOnBack(r, world.frog, world.elapsed);
+    if (world.shieldActive) drawShieldBubble(r, world.frog, world.elapsed);
+    if (world.megaHopActive) drawMegaHopChevron(r, world.frog, world.elapsed);
 
     drawLighting(r, theme, world.lanes);
     drawWeather(r, theme);
+    if (world.freezeElapsed !== null) {
+      drawFreezeVignette(r, 1 - freezeLaneTimeScale(world.freezeElapsed));
+    }
 
     particles.render(r, alpha);
     popups.render(r);

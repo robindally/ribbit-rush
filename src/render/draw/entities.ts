@@ -2,7 +2,7 @@
 // sprite-based. See ARCHITECTURE.md section 11, docs/ART_BIBLE.md sections 4-5,
 // docs/specs/M3-art-pass.md sections 1 and 4-5, and docs/specs/M6-worlds.md sections 2 and 5.
 
-import { COLS, TILE } from '../../game/constants';
+import { COLS, MEGA_HOP_ARC_TILES, TILE } from '../../game/constants';
 import { isTrainWarningActive, moverInstances, moverSpeed } from '../../game/lanes';
 import type { Weather } from '../../game/themes';
 import type { Dir, Frog, LaneDef, MoverDef } from '../../game/types';
@@ -267,7 +267,12 @@ export function drawFrog(r: Renderer, frog: Frog, elapsed: number, blinking: boo
   }
 
   const hopping = frog.state === 'hopping';
-  const arcTiles = hopping ? frogHopArc(frog.hopT) : 0;
+  // A Mega Hop (M7: docs/specs/M7-powerups-scoring.md section 1) is detectable purely from the
+  // frog's own committed hop target - a forward hop that covers 2 rows instead of 1 - with no
+  // extra World/Frog state needed: `computeMegaHopTarget` is the only thing that ever produces a
+  // 2-row jump.
+  const isMegaHop = hopping && Math.abs(frog.toRow - frog.fromRow) === 2;
+  const arcTiles = hopping ? frogHopArc(frog.hopT, isMegaHop ? MEGA_HOP_ARC_TILES : undefined) : 0;
   const y = groundY - arcTiles * TILE;
   const shadowScale = hopping ? frogShadowScale(frog.hopT) : 1;
 

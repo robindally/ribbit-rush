@@ -444,3 +444,175 @@ describe('M6 train warning', () => {
     expect(fired).toEqual([8]); // fired exactly once, for the rail lane's row
   });
 });
+
+// --- M7: Bubble Shield cancels each death cause (docs/specs/M7-powerups-scoring.md section 1) ---
+
+describe('M7 Bubble Shield', () => {
+  it('cancels a squish death, pushing the frog back to the tile it hopped from', () => {
+    const roadLane: LaneDef = {
+      row: 8,
+      kind: 'road',
+      speed: 0,
+      period: 20,
+      movers: [{ type: 'car', width: 1, offset: 6.7 }], // spans [5.7, 6.7)
+    };
+    const world = new World(levelWithLanes([roadLane]), 1, 1);
+    placeFrogAtMedian(world.frog);
+    world.shieldActive = true;
+
+    world.queueHop('down');
+    const dt = 1 / 60;
+    for (let i = 0; i < 7; i++) world.update(dt);
+
+    expect(world.frog.state).toBe('idle'); // not dying - the shield cancelled it
+    expect(world.frog.deathCause).toBeUndefined();
+    expect(world.frog.row).toBe(MEDIAN_ROW); // pushed back to the pre-hop tile
+    expect(world.frog.x).toBe(6);
+    expect(world.shieldActive).toBe(false); // consumed
+    expect(world.lives).toBe(START_LIVES); // no life lost
+  });
+
+  it('cancels a drown death, pushing the frog to the nearest platform in the same lane', () => {
+    const riverLane: LaneDef = {
+      row: 6,
+      kind: 'river',
+      speed: 0,
+      period: 20,
+      movers: [{ type: 'log', width: 3, offset: 3 }], // spans [0, 3)
+    };
+    const world = new World(levelWithLanes([riverLane]), 1, 1);
+    placeFrogIdleAt(world.frog, 10, 6); // far from the log, over open water
+    world.shieldActive = true;
+
+    world.update(1 / 60); // resolveRowEffects finds no platform under x=10 -> die('drown')
+
+    expect(world.frog.state).toBe('idle');
+    expect(world.frog.row).toBe(6); // stays in the same river row
+    expect(world.frog.x).toBeCloseTo(2.999, 2); // nearest edge of the log's span
+    expect(world.shieldActive).toBe(false);
+  });
+
+  it('cancels a timeout death the same way as any other cause', () => {
+    const level: LevelDef = { ...levelWithLanes([]), timeLimit: 0.01 };
+    const world = new World(level, 1, 1);
+    world.shieldActive = true;
+
+    world.update(1 / 60); // timeLeft goes <= 0 -> die('timeout')
+
+    expect(world.frog.state).toBe('idle');
+    expect(world.shieldActive).toBe(false);
+    expect(world.lives).toBe(START_LIVES);
+  });
+
+  it('does not double-count a cancelled death in run stats', () => {
+    const roadLane: LaneDef = {
+      row: 8,
+      kind: 'road',
+      speed: 0,
+      period: 20,
+      movers: [{ type: 'car', width: 1, offset: 6.7 }],
+    };
+    const world = new World(levelWithLanes([roadLane]), 1, 1);
+    placeFrogAtMedian(world.frog);
+    world.shieldActive = true;
+    world.queueHop('down');
+    const dt = 1 / 60;
+    for (let i = 0; i < 7; i++) world.update(dt);
+
+    expect(world.getRunStats().deathsByCause.squish).toBeUndefined();
+  });
+});
+
+// --- M7: Mega Hop covers 2 tiles on the next forward hop only (spec section 1) ---
+
+describe('M7 Mega Hop', () => {
+  it('covers 2 rows on a forward hop and is consumed', () => {
+    const riverLane: LaneDef = {
+      row: 5,
+      kind: 'river',
+      speed: 0,
+      period: 20,
+      movers: [{ type: 'log', width: 100, offset: 100 }], // wide safe platform
+    };
+    const world = new World(levelWithLanes([riverLane]), 1, 1);
+    placeFrogIdleAt(world.frog, 6, MEDIAN_ROW);
+    world.megaHopActive = true;
+
+    world.queueHop('up'); // MEDIAN_ROW (7) -> 5, skipping row 6 entirely
+    expect(world.frog.toRow).toBe(5);
+    expect(world.megaHopActive).toBe(false); // consumed at hop start
+
+    const dt = 1 / 60;
+    for (let i = 0; i < 7; i++) world.update(dt);
+    expect(world.frog.row).toBe(5);
+    expect(world.frog.state).toBe('idle');
+  });
+
+  it('is not consumed by a side hop', () => {
+    const medianLane: LaneDef = { row: MEDIAN_ROW, kind: 'median', speed: 0, period: 20, movers: [] };
+    const world = new World(levelWithLanes([medianLane]), 1, 1);
+    placeFrogIdleAt(world.frog, 6, MEDIAN_ROW);
+    world.megaHopActive = true;
+
+    world.queueHop('right');
+    const dt = 1 / 60;
+    for (let i = 0; i < 7; i++) world.update(dt);
+
+    expect(world.megaHopActive).toBe(true); // still armed
+  });
+
+  it('stays armed (not consumed) when the 2-tile jump would be blocked', () => {
+    const world = new World(levelWithLanes([]), 1, 1);
+    placeFrogIdleAt(world.frog, 6, 2); // row 2 - 2 = row 0, out of bounds
+    world.megaHopActive = true;
+
+    world.queueHop('up');
+    expect(world.frog.state).toBe('idle'); // blocked: no hop started
+    expect(world.frog.row).toBe(2);
+    expect(world.megaHopActive).toBe(true); // not consumed by a blocked attempt
+  });
+});
+
+// --- M7: lady frog pickup/drop/home bonus (spec section 2) ---
+
+describe('M7 lady frog', () => {
+  it('is dropped on death and does not carry over to the next attempt', () => {
+    const roadLane: LaneDef = {
+      row: 8,
+      kind: 'road',
+      speed: 0,
+      period: 20,
+      movers: [{ type: 'car', width: 1, offset: 6.7 }],
+    };
+    const world = new World(levelWithLanes([roadLane]), 1, 1);
+    placeFrogAtMedian(world.frog);
+    world.carryingLadyFrog = true;
+
+    world.queueHop('down');
+    const dt = 1 / 60;
+    for (let i = 0; i < 7; i++) world.update(dt);
+
+    expect(world.carryingLadyFrog).toBe(false);
+  });
+
+  it('scores +500 with a LADY FROG label when reaching home while carried', () => {
+    const level = levelWithLanes([]);
+    const world = new World(level, 1, 1);
+    placeFrogIdleAt(world.frog, 3, HOME_ROW + 1); // column 3 is a home slot
+    world.frog.facing = 'up';
+    world.carryingLadyFrog = true;
+
+    const events: { label?: string }[] = [];
+    const onScore = (e: { label?: string }): void => {
+      events.push(e);
+    };
+    gameEvents.on('score', onScore);
+    world.queueHop('up');
+    const dt = 1 / 60;
+    for (let i = 0; i < 7; i++) world.update(dt);
+    gameEvents.off('score', onScore);
+
+    expect(world.carryingLadyFrog).toBe(false);
+    expect(events.some((e) => e.label === '+500 LADY FROG')).toBe(true);
+  });
+});

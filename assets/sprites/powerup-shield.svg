@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Bubble Shield power-up badge. ART_BIBLE.md section 3: "#3E9CE6 bubble on white ring";
+       section 4: "White ring, coloured disc, simple icon in white". 0.8-tile badge (ring r=19). -->
+  <circle cx="24" cy="24" r="19" fill="#FFFFFF"/>
+  <circle cx="24" cy="24" r="16" fill="#3E9CE6"/>
+  <ellipse cx="19" cy="18" rx="5" ry="3.2" fill="#FFFFFF" opacity="0.35" transform="rotate(-25 19 18)"/>
+  <path d="M24 13 C30 15 31 18 31 22 C31 29 27 33 24 35 C21 33 17 29 17 22 C17 18 18 15 24 13 Z"
+        fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linejoin="round"/>
+</svg>
