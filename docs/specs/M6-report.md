@@ -352,3 +352,113 @@ one-off `.mjs` scripts - same pattern M5's report already documented for `review
 tests in `tests/lanes.test.ts`, oil/killer/train-warning `World` integration tests in
 `tests/world.test.ts`, and the full `tests/level.test.ts` suite for `getLevel`), and `npm run
 build` all pass clean. No git commit made, per instructions.
+
+## Fix-up
+
+Four fix-ups from Fable's M6 review, implemented by the Sonnet engineer. Not committed - Fable
+reviews and commits, per instructions.
+
+### 1. Ice floe sprites (`assets/sprites/floe-2.svg`, `floe-3.svg`)
+
+Redrawn from scratch to address "Bible rules I found ambiguous" #4 above (the shape read as a soft
+cloud/ice-cap, not pack ice). Both sprites are now a flat ice slab: an irregular **convex** octagon
+(8 vertices, computed and verified convex with a cross-product check, not eyeballed), corners
+rounded with a 3px radius via quadratic-Bezier corner-cutting. No bumps, no lobes.
+
+- **Fill** `#E6F0F8` (bible-exact) for the top face.
+- **Front face** (three-quarter rule, bible section 2): rather than a separate hand-fitted bottom
+  silhouette, the top-face polygon is the *same* octagon uniformly scaled 82% toward its own top
+  edge (matching `car.svg`/`truck.svg`'s own front-face technique - draw the full-height shape in
+  the front colour, then the top-face shape over it, shorter, revealing a bottom strip) - so the
+  revealed strip is exactly 18% of the slab's own height, in `#BFE3FA`, following the polygon's
+  real bottom silhouette rather than a rectangle.
+- **1.5px inner edge** in `#BFE3FA`: the top-face path's own `stroke`, same convention as every
+  other sprite's inner-edge rule.
+- **Highlight**: one soft white ellipse, top-left, opacity 0.3.
+- **Cracks**: unchanged - still drawn in code by `render/draw/entities.ts`'s `drawFloeCracks`, only
+  while `mover.floe.state === 'cracking'`, over this static sprite (M6's own deviation #9; nothing
+  about that mechanism needed to change, since the crack paths were never baked into the SVG to
+  begin with - the group-id caveat in the fix-up brief didn't apply).
+- floe-2 and floe-3 use the same vertex proportions (same front-strip ratio, same corner radius),
+  scaled horizontally, so a 2x1 and a 3x1 floe now read as slabs of the same ice rather than two
+  differently-shaped blobs.
+
+### 2. World 3 puddles (`src/render/draw/weather.ts`)
+
+`drawRain`'s puddle fill was pure `theme.palette.accentB` (world 3's is `#3EF2FF`, a saturated
+neon cyan) at 0.5 alpha - saturated enough over the dark road that it read as a solid cyan disc
+rather than a reflection. Added a local `mixHex(a, b, t = 0.5)` helper (same
+hex-to-rgb/lerp shape as `render/draw/hud.ts`'s private `lerpColor`, kept local rather than shared
+since both are small single-file helpers) and changed the fill to
+`mixHex(theme.palette.road, theme.palette.accentB)` - a 50/50 blend of the road colour and the
+reflected light colour - at the same 0.5 alpha (already at spec; the brief's "reduce to about 0.5"
+is satisfied by the existing value, the actual fix is the colour blend). Puddles now read as wet
+asphalt with a muted colour reflection. Untouched: alpha value, ellipse sizing/placement/seeded RNG,
+the rain streaks, and the rain ring ripples (`particles.ripple`, still called for both puddle hits
+and open water).
+
+### 3. Level data (`docs/LEVELS.md`, `src/game/level.ts`, `tests/level.test.ts`)
+
+**3a. World 4's median snake moved from level 10 to level 11.** Level 10 (`W4_L10`) no longer
+defines a row 7 (median) lane at all - fog, diving turtles, and traffic only, matching the
+difficulty-spine row's new "Fog, all turtles dive" description; `withStatics` fills row 7 with an
+empty median lane automatically since no dynamic lane claims it. Level 11 (`W4_L11`) introduces the
+snake fresh - `ln(7, 'median', 0.8, 20, [mv('snake', SNAKE_W, 0)])`, a literal (not
+`0.8 * MULT_2`) since it's now this lane's own first statement, per this file's own
+literal-vs-scaled convention - alongside the otters that were already there. Level 12 (`W4_L12`)
+keeps its second median snake and swimming snake exactly as before; its first snake's speed carries
+forward the level-11 literal `0.8` unchanged (not `0.8 * MULT_3`), matching the same
+carry-forward convention already used elsewhere in this file (e.g. world 2's row 9 motorbikes,
+world 3's row 9 taxis). `docs/LEVELS.md`'s difficulty-spine row 10 now reads "Fog, all turtles
+dive" and row 11 "Median snake, otters"; the World 4 table and level bullets updated to match.
+
+**3b. Period rule, made a strict invariant.** Every one of the thirteen `KNOWN_PERIOD_SHORTFALLS`
+entries from `tests/level.test.ts` was fixed at the data level instead of allowlisted: for each
+affected lane, period raised to `COLS + widest + 1`, and every mover's offset scaled by
+`newPeriod / oldPeriod` and rounded to the nearest 0.5, in both `docs/LEVELS.md` and
+`src/game/level.ts`. Six distinct lanes (some shared verbatim across 2-3 levels, giving the
+original 13 allowlist keys):
+
+| Lane | Old period / offsets | New period / offsets | Levels touched |
+| --- | --- | --- | --- |
+| World 1 row 2 (log w4) | 16 / 0, 8 | 18 / 0, 9 | 1, 2, 3 (base table) |
+| World 1 row 5 (log w2 x3) | 14 / 0, 4.5, 9 | 16 / 0, 5, 10.5 | 1, 2, 3 (base table) |
+| World 1 level 3 row 10 (motorbike) | 12 / 0, 6 | 14.6 / 0, 7.5 | 3 only |
+| World 2 row 9 (motorbike, introduced level 5) | 13 / 0, 6.5 | 14.6 / 0, 7.5 | 5, 6 (literal carry-forward) |
+| World 3 row 5 (log w4) | 16 / 0, 8 | 18 / 0, 9 | 7, 8, 9 (base table) |
+| World 5 row 6 (log w4, level 13 base only) | 16 / 0, 8 | 18 / 0, 9 | 13 only (14/15 already use narrower w3 logs at period 16, already compliant) |
+| World 5 level 15 row 10 (motorbike) | 13 / 0, 6.5 | 14.6 / 0, 7.5 | 15 only |
+
+`tests/level.test.ts`'s `KNOWN_PERIOD_SHORTFALLS`/`MAX_KNOWN_SHORTFALL` allowlist machinery is
+deleted; the test now asserts `period >= COLS + widest mover` unconditionally for every lane in
+every level, so any future data-entry typo fails loudly with no escape hatch.
+
+### 4. Verification
+
+Reviewer's harness re-run at the three changed levels against a dev server on port 5174 (the
+reviewer's own 5173 was never touched), each with zero console/page errors:
+
+```
+node scripts/review.mjs --url http://localhost:5174 --level 10 --secs 15 --every 15 --shots docs/screens/review/l10
+node scripts/review.mjs --url http://localhost:5174 --level 11 --secs 15 --every 15 --shots docs/screens/review/l11
+node scripts/review.mjs --url http://localhost:5174 --level 13 --secs 15 --every 15 --shots docs/screens/review/l13
+```
+
+Level 10's screenshot shows an empty median (no snake) with fog/turtle/traffic hazards only; level
+11's shows the otters plus the newly-introduced median snake lane; level 13 ran clean with the
+redrawn floe sprites and the world 5 train/rail lane, the bot filling two homes in the 15s window
+with no errors.
+
+`docs/screens/m6fix-floes.png`: world 5, level 13 (`window.__rr.jumpToLevel(13)`), with several
+floe movers' `mover.floe.state` forced to `'cracking'` via the dev hook
+(`window.__rr.world.lanes`) so solid and cracking floes are both visible in the same frame - solid
+floes show the clean faceted slab with no cracks, the forced-cracking floe shows the three
+`drawFloeCracks` lines over the same base sprite.
+
+`docs/screens/m6fix-puddles.png`: world 3, level 7, rain active - puddles now read as dim
+teal-tinted wet patches on the dark road rather than saturated cyan discs, with the rain streaks
+and ring ripples unaffected.
+
+Gates re-run clean after every change: `npm run typecheck` (0 errors), `npm run lint` (0 errors,
+the same 6 pre-existing `no-console` warnings in one-off `.mjs` scripts), `npm test` (9 files,
+**127 tests**, including the now-unconditional period-rule test), and `npm run build`.

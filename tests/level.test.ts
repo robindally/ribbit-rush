@@ -2,55 +2,30 @@ import { describe, expect, it } from 'vitest';
 import { getLevel } from '../src/game/level';
 import { COLS } from '../src/game/constants';
 
-/**
- * Known period < COLS + widest-mover shortfalls, inherited verbatim from docs/LEVELS.md's own
- * numbers (never adjusted - "do not change the tables without Fable's sign-off", M6 spec
- * acceptance #3). Each is a *sliver* overlap at most (see docs/specs/M6-report.md "Deviations" for
- * the full per-lane arithmetic): the same mover's two period-wrapped copies can be simultaneously
- * "visible" by the render/collision code's own `x + width > 0 && x < COLS` test for at most a
- * fraction of a tile at the screen edge, which reads as an ordinary mover exiting one side while
- * the next one enters the other - not a visible glitch. Keyed by `${level}:${row}` so a genuinely
- * new violation (a future data-entry typo) still fails this test.
- */
-const KNOWN_PERIOD_SHORTFALLS = new Set<string>([
-  '1:2', // world 1 base: period 16, log w4 -> needs 17
-  '2:2',
-  '3:2',
-  '1:5', // world 1 base: period 14, log w2 -> needs 15
-  '2:5',
-  '3:5',
-  '3:10', // world 1 level 3: motorbike lane, period 12, w0.6 -> needs 13.6
-  '5:9', // world 2 level 5: motorbike lane, period 13, w0.6 -> needs 13.6
-  '6:9', // world 2 level 6: inherits level 5's row 9 motorbikes unchanged
-  '7:5', // world 3 base: period 16, log w4 -> needs 17 (unchanged through levels 7-9)
-  '8:5',
-  '9:5',
-  '13:6', // world 5 base: period 16, log w4 -> needs 17 (level 14 shrinks row 6 to w3, fixing it)
-  '15:10', // world 5 level 15: motorbike lane, period 13, w0.6 -> needs 13.6
-]);
-const MAX_KNOWN_SHORTFALL = 1.6; // tiles; a regression beyond this still fails
-
 function widestMover(movers: { width: number }[]): number {
   return movers.reduce((max, m) => Math.max(max, m.width), 0);
 }
 
+/**
+ * Strict invariant (design review fix-up 3b, docs/specs/M6-report.md's "Fix-up" section): every
+ * lane's period must be at least COLS + widest mover, with no exceptions. The handful of sub-tile
+ * shortfalls M6 shipped with (world 1 rows 2/5, world 1 level 3's/world 2 level 5-6's/world 5
+ * level 15's motorbike lanes, world 3 row 5, world 5 level 13 row 6) were fixed at the data level -
+ * period raised to COLS + widest + 1 in both docs/LEVELS.md and src/game/level.ts, with mover
+ * offsets scaled proportionally - so a *new* violation (a future data-entry typo) fails this test
+ * with no allowlist to hide behind.
+ */
 describe('getLevel: period >= COLS + widest mover', () => {
   for (let n = 1; n <= 15; n++) {
-    it(`level ${n}: every lane's period is long enough (or a known, documented exception)`, () => {
+    it(`level ${n}: every lane's period is long enough`, () => {
       const level = getLevel(n);
       for (const lane of level.lanes) {
         if (lane.movers.length === 0) continue;
         const widest = widestMover(lane.movers);
         const needed = COLS + widest;
-        const key = `${n}:${lane.row}`;
-        if (KNOWN_PERIOD_SHORTFALLS.has(key)) {
-          expect(lane.period).toBeLessThan(needed);
-          expect(needed - lane.period).toBeLessThanOrEqual(MAX_KNOWN_SHORTFALL);
-        } else {
-          expect(lane.period, `world ${level.world} level ${n} row ${lane.row}`).toBeGreaterThanOrEqual(
-            needed,
-          );
-        }
+        expect(lane.period, `world ${level.world} level ${n} row ${lane.row}`).toBeGreaterThanOrEqual(
+          needed,
+        );
       }
     });
   }

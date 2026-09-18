@@ -1,15 +1,28 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 48" width="96" height="48">
-  <!-- Ribbit Rush ice floe, 2 tiles. Irregular rounded polygon (bible: #E6F0F8, cracks #9FB9CF -
-       crack paths are drawn in code only while cracking, see render/draw/entities.ts). -->
-  <path d="M6 26 C4 20 10 14 18 13 C24 8 34 7 42 11 C54 6 70 8 80 14 C90 16 93 24 88 30
-           C90 35 84 40 74 39 C64 43 46 43 36 39 C24 42 12 39 8 33 C4 32 4 28 6 26 Z" fill="#B9CBDA"/>
-  <path d="M7 25 C5.5 20 11 14.5 18.5 13.5 C24.5 9 34 8 41.5 11.5 C53.5 7 69 9 79 14.5
-           C88.5 16.5 91.5 23.5 87 29 C89 34 83 38.5 73.5 37.5 C63.5 41.5 46 41.5 36 37.5
-           C24.5 40.5 13 37.5 9 32 C5.5 31 5 27.5 7 25 Z" fill="#E6F0F8"/>
-  <!-- subtle interior texture, static (not the dynamic crack overlay) -->
-  <g stroke="#CFE0EE" stroke-width="1.2" fill="none" opacity="0.7">
-    <path d="M20 18 L26 24"/>
-    <path d="M62 15 L58 22"/>
-  </g>
-  <ellipse cx="26" cy="18" rx="10" ry="4" fill="#FFFFFF" opacity="0.3"/>
+  <!-- Ribbit Rush ice floe, 2 tiles. Flat ice slab: irregular convex octagon (8 vertices, 3px
+       rounded corners), fill #E6F0F8, three-quarter front face along the bottom edge (bible
+       section 2/4: #BFE3FA), 1.5px inner edge in #BFE3FA, soft white top-left highlight. No
+       cracks baked in here - drawn only while state === 'cracking' by
+       render/draw/entities.ts's drawFloeCracks, over this static sprite. -->
+  <!-- front face (bottom-edge strip, revealed where the top face below stops short) -->
+  <path
+    d="M 14.48 14.59 Q 16.00 12.00 18.93 11.34 L 35.07 7.66 Q 38.00 7.00 40.99 7.21 L 63.01 8.79
+       Q 66.00 9.00 68.79 10.09 L 86.21 16.91 Q 89.00 18.00 89.73 20.91 L 91.27 27.09
+       Q 92.00 30.00 89.32 31.34 L 74.68 38.66 Q 72.00 40.00 69.00 40.08 L 37.00 40.92
+       Q 34.00 41.00 31.24 39.82 L 8.76 30.18 Q 6.00 29.00 7.52 26.41 L 14.48 14.59 Z"
+    fill="#BFE3FA"
+  />
+  <!-- top face, same slab scaled up from the top edge so only the bottom 18% shows the front
+       face - and its own stroke doubles as the 1.5px inner edge -->
+  <path
+    d="M 14.48 13.21 Q 16.00 11.10 18.56 10.62 L 35.44 7.48 Q 38.00 7.00 40.60 7.15 L 63.40 8.49
+       Q 66.00 8.64 68.48 9.43 L 86.52 15.23 Q 89.00 16.02 89.76 18.51 L 91.24 23.37
+       Q 92.00 25.86 89.59 26.85 L 74.41 33.07 Q 72.00 34.06 69.40 34.12 L 36.60 34.82
+       Q 34.00 34.88 31.55 34.02 L 8.45 25.90 Q 6.00 25.04 7.52 22.93 L 14.48 13.21 Z"
+    fill="#E6F0F8"
+    stroke="#BFE3FA"
+    stroke-width="1.5"
+  />
+  <!-- soft highlight, top-left -->
+  <ellipse cx="27" cy="15" rx="11" ry="4" fill="#FFFFFF" opacity="0.3"/>
 </svg>

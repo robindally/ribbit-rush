@@ -90,10 +90,13 @@ const SNAKE_W = 1.5;
 // ============================================================================================
 
 const W1_L1: LaneSeed[] = [
-  ln(2, 'river', 1.6, 16, [mv('log', 4, 0), mv('log', 4, 8)]),
+  // Row 2/row 5 periods raised from LEVELS.md's original 16/14 to 18/16 (design review fix-up 3b:
+  // period >= COLS + widest mover for every lane, no allowlisted shortfalls) - offsets scaled
+  // proportionally and rounded to 0.5, see docs/specs/M6-report.md's "Fix-up" section.
+  ln(2, 'river', 1.6, 18, [mv('log', 4, 0), mv('log', 4, 9)]),
   ln(3, 'river', -1.2, 15, [mv('turtle', 2, 0), mv('turtle', 2, 5), mv('turtle', 2, 10)]),
   ln(4, 'river', 2.4, 18, [mv('log', 3, 0), mv('log', 3, 9)]),
-  ln(5, 'river', -1.0, 14, [mv('log', 2, 0), mv('log', 2, 4.5), mv('log', 2, 9)]),
+  ln(5, 'river', -1.0, 16, [mv('log', 2, 0), mv('log', 2, 5), mv('log', 2, 10.5)]),
   ln(6, 'river', 1.4, 16, [mv('turtle', 3, 0), mv('turtle', 3, 8)]),
   ln(8, 'road', -2.2, 16, [mv('truck', 2, 0), mv('truck', 2, 8)]),
   ln(9, 'road', 1.5, 15, [mv('car', 1, 0), mv('car', 1, 5), mv('car', 1, 10)]),
@@ -104,14 +107,14 @@ const W1_L1: LaneSeed[] = [
 
 // Level 2: "turtle groups at row 3 @10 and row 6 @8 dive (up 4s down 2s, phase 0 and 2)."
 const W1_L2: LaneSeed[] = [
-  ln(2, 'river', 1.6 * MULT_2, 16, [mv('log', 4, 0), mv('log', 4, 8)]),
+  ln(2, 'river', 1.6 * MULT_2, 18, [mv('log', 4, 0), mv('log', 4, 9)]),
   ln(3, 'river', -1.2 * MULT_2, 15, [
     mv('turtle', 2, 0),
     mv('turtle', 2, 5),
     mv('turtle', 2, 10, { dive: { up: 4, down: 2, phase: 0 } }),
   ]),
   ln(4, 'river', 2.4 * MULT_2, 18, [mv('log', 3, 0), mv('log', 3, 9)]),
-  ln(5, 'river', -1.0 * MULT_2, 14, [mv('log', 2, 0), mv('log', 2, 4.5), mv('log', 2, 9)]),
+  ln(5, 'river', -1.0 * MULT_2, 16, [mv('log', 2, 0), mv('log', 2, 5), mv('log', 2, 10.5)]),
   ln(6, 'river', 1.4 * MULT_2, 16, [
     mv('turtle', 3, 0),
     mv('turtle', 3, 8, { dive: { up: 4, down: 2, phase: 2 } }),
@@ -123,24 +126,26 @@ const W1_L2: LaneSeed[] = [
   ln(12, 'road', -1.6 * MULT_2, 14, [mv('car', 1, 0), mv('taxi', 1, 4.5), mv('car', 1, 9.5)]),
 ];
 
-// Level 3: "row 10 becomes motorbikes: speed -3.6, period 12, motorbike w0.6 @0 and @6. All
+// Level 3: "row 10 becomes motorbikes: speed -3.6, period 14.6, motorbike w0.6 @0 and @7.5. All
 // turtles from level 2 still dive."
 const W1_L3: LaneSeed[] = [
-  ln(2, 'river', 1.6 * MULT_3, 16, [mv('log', 4, 0), mv('log', 4, 8)]),
+  ln(2, 'river', 1.6 * MULT_3, 18, [mv('log', 4, 0), mv('log', 4, 9)]),
   ln(3, 'river', -1.2 * MULT_3, 15, [
     mv('turtle', 2, 0),
     mv('turtle', 2, 5),
     mv('turtle', 2, 10, { dive: { up: 4, down: 2, phase: 0 } }),
   ]),
   ln(4, 'river', 2.4 * MULT_3, 18, [mv('log', 3, 0), mv('log', 3, 9)]),
-  ln(5, 'river', -1.0 * MULT_3, 14, [mv('log', 2, 0), mv('log', 2, 4.5), mv('log', 2, 9)]),
+  ln(5, 'river', -1.0 * MULT_3, 16, [mv('log', 2, 0), mv('log', 2, 5), mv('log', 2, 10.5)]),
   ln(6, 'river', 1.4 * MULT_3, 16, [
     mv('turtle', 3, 0),
     mv('turtle', 3, 8, { dive: { up: 4, down: 2, phase: 2 } }),
   ]),
   ln(8, 'road', -2.2 * MULT_3, 16, [mv('truck', 2, 0), mv('truck', 2, 8)]),
   ln(9, 'road', 1.5 * MULT_3, 15, [mv('car', 1, 0), mv('car', 1, 5), mv('car', 1, 10)]),
-  ln(10, 'road', -3.6, 12, [mv('motorbike', MOTORBIKE_W, 0), mv('motorbike', MOTORBIKE_W, 6)]),
+  // Row 10 motorbike lane: period raised 12 -> 14.6 (13 + widest 0.6 + 1), offset scaled and
+  // rounded to 0.5 (fix-up 3b).
+  ln(10, 'road', -3.6, 14.6, [mv('motorbike', MOTORBIKE_W, 0), mv('motorbike', MOTORBIKE_W, 7.5)]),
   ln(11, 'road', 1.2 * MULT_3, 16, [mv('bus', 2, 0), mv('bus', 2, 6), mv('bus', 2, 12)]),
   ln(12, 'road', -1.6 * MULT_3, 14, [mv('car', 1, 0), mv('taxi', 1, 4.5), mv('car', 1, 9.5)]),
 ];
@@ -174,7 +179,7 @@ const W2_L4: LaneSeed[] = [
   ln(12, 'road', -2.4, 15, [mv('car', 1, 0), mv('taxi', 1, 5), mv('car', 1, 10)]),
 ];
 
-// Level 5: "row 9 becomes motorbikes too: speed +3.8, period 13, motorbike @0, @6.5."
+// Level 5: "row 9 becomes motorbikes too: speed +3.8, period 14.6, motorbike @0, @7.5."
 const W2_L5: LaneSeed[] = [
   ln(2, 'river', 1.8 * MULT_2, 18, [
     mv('log', 3, 0),
@@ -198,7 +203,9 @@ const W2_L5: LaneSeed[] = [
     mv('turtle', 3, 8, { dive: { up: 4, down: 2, phase: 1 } }),
   ]),
   ln(8, 'road', -3.2 * MULT_2, 18, [mv('sports', 1, 0), mv('sports', 1, 6), mv('sports', 1, 12)]),
-  ln(9, 'road', 3.8, 13, [mv('motorbike', MOTORBIKE_W, 0), mv('motorbike', MOTORBIKE_W, 6.5)]),
+  // Row 9 motorbike lane: period raised 13 -> 14.6 (13 + widest 0.6 + 1), offset scaled and
+  // rounded to 0.5 (fix-up 3b).
+  ln(9, 'road', 3.8, 14.6, [mv('motorbike', MOTORBIKE_W, 0), mv('motorbike', MOTORBIKE_W, 7.5)]),
   ln(10, 'road', -4.0 * MULT_2, 14, [mv('motorbike', MOTORBIKE_W, 0), mv('motorbike', MOTORBIKE_W, 7)]),
   ln(11, 'road', 1.4 * MULT_2, 18, [mv('bus', 2, 0), mv('bus', 2, 9)]),
   ln(12, 'road', -2.4 * MULT_2, 15, [mv('car', 1, 0), mv('taxi', 1, 5), mv('car', 1, 10)]),
@@ -225,8 +232,9 @@ const W2_L6: LaneSeed[] = [
   ]),
   ln(8, 'road', -3.2 * MULT_3, 18, [mv('sports', 1, 0), mv('sports', 1, 6), mv('sports', 1, 12)]),
   // Row 9's motorbikes were introduced at level 5 with their own literal speed/period (no base
-  // table value to scale) - they carry forward unchanged, per this file's header note.
-  ln(9, 'road', 3.8, 13, [mv('motorbike', MOTORBIKE_W, 0), mv('motorbike', MOTORBIKE_W, 6.5)]),
+  // table value to scale) - they carry forward unchanged, per this file's header note. (Period
+  // 14.6, offset 7.5 per fix-up 3b - same as level 5's own row 9 above.)
+  ln(9, 'road', 3.8, 14.6, [mv('motorbike', MOTORBIKE_W, 0), mv('motorbike', MOTORBIKE_W, 7.5)]),
   ln(10, 'road', -4.0 * MULT_3, 14, [mv('motorbike', MOTORBIKE_W, 0), mv('motorbike', MOTORBIKE_W, 7)]),
   ln(11, 'road', 1.4 * MULT_3, 18, [mv('bus', 2, 0), mv('bus', 2, 9)]),
   ln(12, 'road', -2.4 * MULT_3, 15, [mv('car', 1, 0), mv('taxi', 1, 5), mv('car', 1, 10)]),
@@ -244,7 +252,8 @@ const W3_L7: LaneSeed[] = [
     mv('turtle', 2, 10),
   ]),
   ln(4, 'river', 2.8, 20, [mv('log', 2, 0), mv('log', 2, 6.5), mv('log', 2, 13)]),
-  ln(5, 'river', -1.4, 16, [mv('log', 4, 0), mv('log', 4, 8)]),
+  // Row 5 period raised 16 -> 18 (13 + widest 4 + 1), offset scaled and rounded to 0.5 (fix-up 3b).
+  ln(5, 'river', -1.4, 18, [mv('log', 4, 0), mv('log', 4, 9)]),
   ln(6, 'river', 1.7, 16, [
     mv('turtle', 3, 0, { dive: { up: 3.5, down: 2, phase: 2 } }),
     mv('turtle', 3, 8),
@@ -269,7 +278,7 @@ const W3_L8: LaneSeed[] = [
     mv('turtle', 2, 10),
   ]),
   ln(4, 'river', 2.8 * MULT_2, 20, [mv('log', 2, 0), mv('log', 2, 6.5), mv('log', 2, 13)]),
-  ln(5, 'river', -1.4 * MULT_2, 16, [mv('log', 4, 0), mv('log', 4, 8)]),
+  ln(5, 'river', -1.4 * MULT_2, 18, [mv('log', 4, 0), mv('log', 4, 9)]),
   ln(6, 'river', 1.7 * MULT_2, 16, [
     mv('turtle', 3, 0, { dive: { up: 3.5, down: 2, phase: 2 } }),
     mv('turtle', 3, 8),
@@ -293,7 +302,7 @@ const W3_L9: LaneSeed[] = [
     mv('turtle', 2, 10, { dive: { up: 3, down: 2, phase: 3 } }),
   ]),
   ln(4, 'river', 2.8 * MULT_3, 20, [mv('log', 2, 0), mv('log', 2, 6.5), mv('log', 2, 13)]),
-  ln(5, 'river', -1.4 * MULT_3, 16, [mv('log', 4, 0), mv('log', 4, 8)]),
+  ln(5, 'river', -1.4 * MULT_3, 18, [mv('log', 4, 0), mv('log', 4, 9)]),
   ln(6, 'river', 1.7 * MULT_3, 16, [
     mv('turtle', 3, 0, { dive: { up: 3, down: 2, phase: 0 } }),
     mv('turtle', 3, 8, { dive: { up: 3, down: 2, phase: 1.5 } }),
@@ -324,7 +333,9 @@ const W4_L10: LaneSeed[] = [
     mv('turtle', 3, 8, { dive: { up: 3.5, down: 2, phase: 1.75 } }),
   ]),
   ln(6, 'river', 1.6, 18, [mv('log', 2, 0), mv('log', 2, 6), mv('log', 2, 12)]),
-  ln(7, 'median', 0.8, 20, [mv('snake', SNAKE_W, 0)]),
+  // No median mover at level 10 (design review fix-up 3a): fog, diving turtles, and traffic only -
+  // the median snake is introduced at level 11 instead. `withStatics` fills row 7 with an empty
+  // median lane since no dynamic lane here claims it.
   ln(8, 'road', -1.8, 18, [mv('truck', 2, 0), mv('truck', 2, 9)]),
   ln(9, 'road', 1.4, 16, [mv('pickup', 1.5, 0), mv('pickup', 1.5, 8)]),
   ln(10, 'road', -2.4, 15, [mv('car', 1, 0), mv('car', 1, 7.5)]),
@@ -332,7 +343,10 @@ const W4_L10: LaneSeed[] = [
   ln(12, 'road', -1.6, 16, [mv('van', 1.5, 0), mv('car', 1, 8)]),
 ];
 
-// Level 11: "add otters: row 4 otter @4.5 speed +3.2 (killer), row 6 otter @3 speed +3.0 (killer)."
+// Level 11: "the median snake is introduced here, not at level 10 (design review fix-up 3a): row 7
+// median speed +0.8, period 20, snake w1.5 @0 (killer) - literal, its own first statement, no base
+// to scale. Also add otters: row 4 otter @4.5 speed +3.2 (killer), row 6 otter @3 speed +3.0
+// (killer)."
 const W4_L11: LaneSeed[] = [
   ln(2, 'river', 1.5 * MULT_2, 16, [mv('log', 3, 0), mv('log', 3, 8)]),
   ln(3, 'river', -1.3 * MULT_2, 15, [
@@ -355,7 +369,7 @@ const W4_L11: LaneSeed[] = [
     mv('log', 2, 12),
     mv('otter', OTTER_W, 3, { speed: 3.0 }),
   ]),
-  ln(7, 'median', 0.8 * MULT_2, 20, [mv('snake', SNAKE_W, 0)]),
+  ln(7, 'median', 0.8, 20, [mv('snake', SNAKE_W, 0)]),
   ln(8, 'road', -1.8 * MULT_2, 18, [mv('truck', 2, 0), mv('truck', 2, 9)]),
   ln(9, 'road', 1.4 * MULT_2, 16, [mv('pickup', 1.5, 0), mv('pickup', 1.5, 8)]),
   ln(10, 'road', -2.4 * MULT_2, 15, [mv('car', 1, 0), mv('car', 1, 7.5)]),
@@ -391,7 +405,10 @@ const W4_L12: LaneSeed[] = [
     mv('log', 2, 12),
     mv('otter', OTTER_W, 3, { speed: 3.0 }),
   ]),
-  ln(7, 'median', 0.8 * MULT_3, 20, [mv('snake', SNAKE_W, 0), mv('snake', SNAKE_W, 10, { speed: 0.8 })]),
+  // Row 7's snake speed carries forward unchanged from its level-11 literal introduction (no base
+  // to scale, per this file's header note); the second snake's own +0.8 is likewise literal, per
+  // docs/LEVELS.md's level 12 bullet.
+  ln(7, 'median', 0.8, 20, [mv('snake', SNAKE_W, 0), mv('snake', SNAKE_W, 10, { speed: 0.8 })]),
   ln(8, 'road', -1.8 * MULT_3, 18, [mv('truck', 2, 0), mv('truck', 2, 9)]),
   ln(9, 'road', 1.4 * MULT_3, 16, [mv('pickup', 1.5, 0), mv('pickup', 1.5, 8)]),
   ln(10, 'road', -2.4 * MULT_3, 15, [mv('car', 1, 0), mv('car', 1, 7.5)]),
@@ -412,7 +429,10 @@ const W5_L13: LaneSeed[] = [
     mv('turtle', 2, 5),
     mv('turtle', 2, 10, { dive: { up: 4, down: 2, phase: 0 } }),
   ]),
-  ln(6, 'river', 1.5, 16, [mv('log', 4, 0), mv('log', 4, 8)]),
+  // Row 6 period raised 16 -> 18 (13 + widest 4 + 1), offset scaled and rounded to 0.5 (fix-up
+  // 3b). Level 14 shrinks this row to w3 logs (period 16 already sufficient), so only the base
+  // level 13 table needed the fix.
+  ln(6, 'river', 1.5, 18, [mv('log', 4, 0), mv('log', 4, 9)]),
   ln(8, 'rail', -7.0, 40, [mv('train', 6, 0)]),
   ln(9, 'road', 1.6, 18, [mv('truck', 2, 0), mv('truck', 2, 9)]),
   ln(10, 'road', -2.8, 16, [mv('sports', 1, 0), mv('sports', 1, 8)]),
@@ -439,7 +459,7 @@ const W5_L14: LaneSeed[] = [
   ln(12, 'road', -2.0 * MULT_2, 15, [mv('car', 1, 0), mv('van', 1.5, 5), mv('car', 1, 10.5)]),
 ];
 
-// Level 15: "train period drops to 30; row 10 becomes motorbikes speed -3.8 period 13 @0, @6.5;
+// Level 15: "train period drops to 30; row 10 becomes motorbikes speed -3.8 period 14.6 @0, @7.5;
 // row 5 all turtles dive (up 3 down 2, phases 0, 1, 2)."
 const W5_L15: LaneSeed[] = [
   ln(2, 'river', 1.6 * MULT_3, 18, [mv('floe', 3, 0), mv('floe', 3, 9)]),
@@ -453,7 +473,9 @@ const W5_L15: LaneSeed[] = [
   ln(6, 'river', 1.5 * MULT_3, 16, [mv('log', 3, 0), mv('log', 3, 8)]),
   ln(8, 'rail', -7.0 * MULT_3, 30, [mv('train', 6, 0)]),
   ln(9, 'road', 1.6 * MULT_3, 18, [mv('truck', 2, 0), mv('truck', 2, 9)]),
-  ln(10, 'road', -3.8, 13, [mv('motorbike', MOTORBIKE_W, 0), mv('motorbike', MOTORBIKE_W, 6.5)]),
+  // Row 10 motorbike lane: period raised 13 -> 14.6 (13 + widest 0.6 + 1), offset scaled and
+  // rounded to 0.5 (fix-up 3b).
+  ln(10, 'road', -3.8, 14.6, [mv('motorbike', MOTORBIKE_W, 0), mv('motorbike', MOTORBIKE_W, 7.5)]),
   ln(11, 'road', 1.3 * MULT_3, 20, [mv('bus', 2, 0), mv('bus', 2, 10)]),
   ln(12, 'road', -2.0 * MULT_3, 15, [mv('car', 1, 0), mv('van', 1.5, 5), mv('car', 1, 10.5)]),
 ];

@@ -17,8 +17,8 @@ positive means moving right. Period is the repeat length in tiles. Widths are in
 | 7 | 3 Neon City | 1.00 | 26 | 0.35 | 0.35 | Rain, trams, oil slicks |
 | 8 | 3 | 1.10 | 24 | 0.35 | 0.35 | More oil, faster taxis |
 | 9 | 3 | 1.20 | 22 | 0.35 | 0.35 | All turtles dive |
-| 10 | 4 Misty Marsh | 1.00 | 26 | 0.45 | 0.35 | Fog, snakes on the median |
-| 11 | 4 | 1.10 | 24 | 0.45 | 0.35 | Otters in the river |
+| 10 | 4 Misty Marsh | 1.00 | 26 | 0.45 | 0.35 | Fog, all turtles dive |
+| 11 | 4 | 1.10 | 24 | 0.45 | 0.35 | Median snake, otters |
 | 12 | 4 | 1.20 | 22 | 0.45 | 0.35 | Snakes swim too |
 | 13 | 5 Frozen Fjord | 1.00 | 24 | 0.50 | 0.35 | Ice floes crack, train lane |
 | 14 | 5 | 1.10 | 22 | 0.50 | 0.35 | Two floe lanes |
@@ -48,10 +48,10 @@ Day, clear. Classic hazards only.
 
 | Row | Kind | Speed | Period | Movers |
 | --- | --- | --- | --- | --- |
-| 2 | river | +1.6 | 16 | log w4 @0, log w4 @8 |
+| 2 | river | +1.6 | 18 | log w4 @0, log w4 @9 |
 | 3 | river | -1.2 | 15 | turtle w2 @0, w2 @5, w2 @10 |
 | 4 | river | +2.4 | 18 | log w3 @0, log w3 @9 |
-| 5 | river | -1.0 | 14 | log w2 @0, w2 @4.5, w2 @9 |
+| 5 | river | -1.0 | 16 | log w2 @0, w2 @5, w2 @10.5 |
 | 6 | river | +1.4 | 16 | turtle w3 @0, w3 @8 |
 | 8 | road | -2.2 | 16 | truck w2 @0, truck w2 @8 |
 | 9 | road | +1.5 | 15 | car @0, car @5, car @10 |
@@ -61,8 +61,8 @@ Day, clear. Classic hazards only.
 
 - Level 1: as above.
 - Level 2: turtle groups at row 3 @10 and row 6 @8 dive (up 4 s, down 2 s, phase 0 and 2).
-- Level 3: row 10 becomes motorbikes: speed -3.6, period 12, motorbike w0.6 @0 and @6. All turtles
-  from level 2 still dive.
+- Level 3: row 10 becomes motorbikes: speed -3.6, period 14.6, motorbike w0.6 @0 and @7.5. All
+  turtles from level 2 still dive.
 
 ## World 2: Coastal Highway
 
@@ -82,7 +82,7 @@ Dusk, clear. Wider gaps but faster, and the water gets hostile.
 | 12 | road | -2.4 | 15 | car @0, taxi @5, car @10 |
 
 - Level 4: as above.
-- Level 5: row 9 becomes motorbikes too: speed +3.8, period 13, motorbike @0, @6.5.
+- Level 5: row 9 becomes motorbikes too: speed +3.8, period 14.6, motorbike @0, @7.5.
 - Level 6: row 4 logs shrink to w2 @0, w2 @5, w2 @10 at period 15; row 2 loses one log (only @0).
 
 ## World 3: Neon City
@@ -94,7 +94,7 @@ Night, rain. Reflections everywhere, and the road is slick.
 | 2 | river | +2.0 | 18 | log w3 @0, log w3 @9 |
 | 3 | river | -1.6 | 15 | turtle w2 @0, @5, @10 (@5 dives, up 3 down 2) |
 | 4 | river | +2.8 | 20 | log w2 @0, w2 @6.5, w2 @13 |
-| 5 | river | -1.4 | 16 | log w4 @0, log w4 @8 |
+| 5 | river | -1.4 | 18 | log w4 @0, log w4 @9 |
 | 6 | river | +1.7 | 16 | turtle w3 @0, w3 @8 (@0 dives, up 3.5 down 2, phase 2) |
 | 8 | road | -2.6 | 20 | tram w3 @0, tram w3 @10 |
 | 9 | road | +3.0 | 15 | taxi @0, taxi @5, taxi @10 |
@@ -120,18 +120,21 @@ Dawn, fog. Vehicles are slower but appear late out of the fog. The wildlife is t
 | 4 | river | +2.2 | 18 | log w4 @0, log w4 @9 |
 | 5 | river | -1.2 | 16 | turtle w3 @0, w3 @8 (both dive, up 3.5 down 2, phases 0, 1.75) |
 | 6 | river | +1.6 | 18 | log w2 @0, w2 @6, w2 @12 |
-| 7 | median | +0.8 | 20 | snake w1.5 @0 (killer) |
 | 8 | road | -1.8 | 18 | truck w2 @0, truck w2 @9 |
 | 9 | road | +1.4 | 16 | pickup w1.5 @0, pickup w1.5 @8 |
 | 10 | road | -2.4 | 15 | car @0, car @7.5 |
 | 11 | road | +1.2 | 20 | bus w2 @0, bus w2 @10 |
 | 12 | road | -1.6 | 16 | van w1.5 @0, car @8 |
 
-Fog renders vehicles at full alpha only within 4 tiles of the frog's column; beyond that they fade
-to 35%. This is visual, not mechanical.
+The median (row 7) carries no mover at level 10 - fog, diving turtles, and traffic only, no
+wildlife hazard yet. Fog renders vehicles at full alpha only within 4 tiles of the frog's column;
+beyond that they fade to 35%. This is visual, not mechanical.
 
 - Level 10: as above.
-- Level 11: add otters: row 4 otter @4.5 speed +3.2 (killer), row 6 otter @3 speed +3.0 (killer).
+- Level 11: the median snake is introduced here, not at level 10 (design review fix-up, see
+  docs/specs/M6-report.md's "Fix-up" section) - row 7 median speed +0.8, period 20, snake w1.5 @0
+  (killer). Also add otters: row 4 otter @4.5 speed +3.2 (killer), row 6 otter @3 speed +3.0
+  (killer).
 - Level 12: add a second snake on the median @10 speed +0.8; row 2 gains a swimming snake @4
   speed +2.8 (killer).
 
@@ -145,7 +148,7 @@ Snow, clear. Heavy traffic, a train, and ice that does not hold.
 | 3 | river | -1.4 | 16 | log w3 @0, log w3 @8 |
 | 4 | river | +2.4 | 18 | floe w2 @0, floe w2 @6, floe w2 @12 |
 | 5 | river | -1.2 | 15 | turtle w2 @0, @5, @10 (@10 dives, up 4 down 2) |
-| 6 | river | +1.5 | 16 | log w4 @0, log w4 @8 |
+| 6 | river | +1.5 | 18 | log w4 @0, log w4 @9 |
 | 8 | rail | -7.0 | 40 | train w6 @0 |
 | 9 | road | +1.6 | 18 | truck w2 @0, truck w2 @9 |
 | 10 | road | -2.8 | 16 | sports @0, sports @8 |
@@ -155,7 +158,7 @@ Snow, clear. Heavy traffic, a train, and ice that does not hold.
 - Level 13: as above.
 - Level 14: row 3 becomes floes: floe w2 @0, w2 @5.5, w2 @11 at period 16 (two floe lanes with row 4);
   row 6 logs shrink to w3.
-- Level 15: train period drops to 30; row 10 becomes motorbikes speed -3.8 period 13 @0, @6.5;
+- Level 15: train period drops to 30; row 10 becomes motorbikes speed -3.8 period 14.6 @0, @7.5;
   row 5 all turtles dive (up 3 down 2, phases 0, 1, 2).
 
 ## Endless

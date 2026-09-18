@@ -1,15 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 48" width="144" height="48">
-  <!-- Ribbit Rush ice floe, 3 tiles. Irregular rounded polygon (bible: #E6F0F8, cracks #9FB9CF -
-       crack paths are drawn in code only while cracking, see render/draw/entities.ts). -->
-  <path d="M6 27 C4 20 12 14 22 13 C30 7 46 6 56 11 C70 6 96 6 112 12 C128 14 138 18 136 26
-           C140 30 134 38 122 39 C108 44 76 44 60 40 C44 43 26 42 16 36 C6 35 3 30 6 27 Z" fill="#B9CBDA"/>
-  <path d="M7 26 C5.5 20.5 13 14.5 22.5 13.5 C30 8.5 46 7.5 55.5 12 C69.5 7.5 95.5 7.5 111 13
-           C126.5 15 136 18.5 134 25.5 C138 29 132 36.5 121 37.5 C107.5 42 76.5 42 61 38.5
-           C45 41.5 27.5 40.5 17.5 35 C7.5 34 4.5 29.5 7 26 Z" fill="#E6F0F8"/>
-  <g stroke="#CFE0EE" stroke-width="1.3" fill="none" opacity="0.7">
-    <path d="M28 17 L36 25"/>
-    <path d="M92 14 L86 22"/>
-    <path d="M112 22 L120 28"/>
-  </g>
-  <ellipse cx="34" cy="18" rx="12" ry="4.2" fill="#FFFFFF" opacity="0.3"/>
+  <!-- Ribbit Rush ice floe, 3 tiles. Same flat ice slab as floe-2.svg, stretched: irregular
+       convex octagon (8 vertices, 3px rounded corners), fill #E6F0F8, three-quarter front face
+       along the bottom edge in #BFE3FA, 1.5px inner edge in #BFE3FA, soft white top-left
+       highlight. No cracks baked in here - drawn only while state === 'cracking' by
+       render/draw/entities.ts's drawFloeCracks, over this static sprite. -->
+  <!-- front face (bottom-edge strip) -->
+  <path
+    d="M 20.20 15.40 Q 22.00 13.00 24.96 12.51 L 55.04 7.49 Q 58.00 7.00 61.00 7.07 L 95.00 7.93
+       Q 98.00 8.00 100.93 8.64 L 127.07 14.36 Q 130.00 15.00 131.83 17.38 L 138.17 25.62
+       Q 140.00 28.00 137.18 29.02 L 106.82 39.98 Q 104.00 41.00 101.00 40.94 L 53.00 40.06
+       Q 50.00 40.00 47.11 39.20 L 12.89 29.80 Q 10.00 29.00 11.80 26.60 L 20.20 15.40 Z"
+    fill="#BFE3FA"
+  />
+  <!-- top face, same slab scaled up from the top edge; stroke is the 1.5px inner edge -->
+  <path
+    d="M 20.25 13.84 Q 22.00 11.92 24.58 11.57 L 55.42 7.35 Q 58.00 7.00 60.60 7.05 L 95.40 7.77
+       Q 98.00 7.82 100.56 8.28 L 127.44 13.10 Q 130.00 13.56 131.78 15.46 L 138.22 22.32
+       Q 140.00 24.22 137.51 24.96 L 106.49 34.14 Q 104.00 34.88 101.40 34.84 L 52.60 34.10
+       Q 50.00 34.06 47.46 33.49 L 12.54 25.61 Q 10.00 25.04 11.75 23.12 L 20.25 13.84 Z"
+    fill="#E6F0F8"
+    stroke="#BFE3FA"
+    stroke-width="1.5"
+  />
+  <!-- soft highlight, top-left -->
+  <ellipse cx="35" cy="15" rx="14" ry="4.4" fill="#FFFFFF" opacity="0.3"/>
 </svg>

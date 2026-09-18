@@ -91,6 +91,22 @@ function ensurePuddles(rng: Rng): Puddle[] {
   return puddles;
 }
 
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace('#', '');
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+/** 50/50 mix of two hex colours - used to blend a puddle's light reflection into the road colour
+ * so puddles read as wet asphalt, not a solid disc of the reflected colour (fix-up 2, M6 review). */
+function mixHex(a: string, b: string, t = 0.5): string {
+  const [ar, ag, ab] = hexToRgb(a);
+  const [br, bg, bb] = hexToRgb(b);
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return `rgb(${r}, ${g}, ${bl})`;
+}
+
 const rainRng = createRng(20260918);
 
 function updateRain(dt: number): void {
@@ -130,7 +146,9 @@ function drawRain(r: Renderer, theme: WorldTheme): void {
   const pds = ensurePuddles(rainRng);
   ctx.save();
   ctx.globalAlpha = 0.5;
-  ctx.fillStyle = theme.palette.accentB;
+  // Wet asphalt, not a solid disc: blend the reflected light colour 50/50 with the road colour
+  // (fix-up 2, M6 review - see docs/specs/M6-report.md's "Fix-up" section).
+  ctx.fillStyle = mixHex(theme.palette.road, theme.palette.accentB);
   for (const p of pds) {
     ctx.beginPath();
     ctx.ellipse(p.x, p.y, p.rx, p.ry, 0, 0, Math.PI * 2);
