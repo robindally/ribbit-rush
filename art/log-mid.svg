@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Log middle segment. Tiles horizontally. -->
+  <rect x="0" y="10" width="48" height="28" fill="#7A5230"/>
+  <rect x="0" y="10" width="48" height="22.5" fill="#9B6B3D"/>
+  <!-- bark lines, horizontal at both edges so the tile repeats cleanly -->
+  <g fill="none" stroke="#7A5230" stroke-width="1.5" stroke-linecap="round">
+    <path d="M0 16.5 C8 15.5 14 18 22 16.5 S38 15 48 16.5"/>
+    <path d="M0 22.5 C10 24 18 21 26 22.5 S40 24 48 22.5"/>
+    <path d="M0 28.5 C6 27.5 16 30 24 28.5 S42 27.5 48 28.5"/>
+  </g>
+  <!-- knot -->
+  <ellipse cx="30" cy="25" rx="3" ry="2" fill="none" stroke="#7A5230" stroke-width="1.2"/>
+  <!-- top highlight -->
+  <rect x="0" y="11.5" width="48" height="2.5" fill="#FFFFFF" opacity="0.16"/>
+</svg>

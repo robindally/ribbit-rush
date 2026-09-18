@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Sprite Preview</title>
+<style>
+  body { margin: 0; padding: 24px; background: #14162B; font: 14px system-ui, sans-serif; color: #FFF7E6; }
+  h1 { font-size: 18px; margin: 0 0 16px; }
+  .row { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 24px; }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .bg { display: flex; align-items: center; justify-content: center; padding: 12px; border-radius: 12px; }
+  .grass { background: repeating-linear-gradient(180deg, #74D06B 0 48px, #66C25E 48px 96px); }
+  .water { background: #3E9CE6; }
+  .road { background: #4B505A; }
+  img { image-rendering: auto; display: block; }
+  .s1 { width: 48px; height: 48px; }
+  .s3 { width: 144px; height: 144px; }
+  .log { display: flex; }
+  .log img { width: 144px; height: 144px; }
+  .log img.flip { transform: scaleX(-1); }
+</style>
+</head>
+<body>
+<h1>Ribbit Rush reference sprites (3x and 1x)</h1>
+<div class="row">
+  <div class="cell"><div class="bg grass"><img class="s3" src="frog-idle.svg"></div>frog-idle</div>
+  <div class="cell"><div class="bg grass"><img class="s3" src="frog-jump.svg"></div>frog-jump</div>
+  <div class="cell"><div class="bg road"><img class="s3" src="car.svg"></div>car</div>
+  <div class="cell"><div class="bg water"><img class="s3" src="turtle.svg"></div>turtle</div>
+  <div class="cell"><div class="bg water"><img class="s3" src="lilypad.svg"></div>lilypad</div>
+</div>
+<div class="row">
+  <div class="cell"><div class="bg water"><div class="log"><img src="log-end.svg"><img src="log-mid.svg"><img src="log-mid.svg"><img class="flip" src="log-end.svg"></div></div>log x4 (end + mid + mid + flipped end)</div>
+</div>
+<div class="row">
+  <div class="cell"><div class="bg grass"><img class="s1" src="frog-idle.svg"><img class="s1" src="frog-jump.svg"></div>frog 1x</div>
+  <div class="cell"><div class="bg road"><img class="s1" src="car.svg"></div>car 1x</div>
+  <div class="cell"><div class="bg water"><img class="s1" src="turtle.svg"><img class="s1" src="lilypad.svg"></div>turtle, pad 1x</div>
+  <div class="cell"><div class="bg water"><div class="log"><img class="s1" src="log-end.svg"><img class="s1" src="log-mid.svg"><img class="s1 flip" src="log-end.svg"></div></div>log 1x</div>
+</div>
+</body>
+</html>

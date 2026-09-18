@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Lily pad: home slot when empty. Notch points right. -->
+  <path d="M25 25.5 L43.07 19.63 A19 19 0 1 0 43.07 31.37 Z" fill="#35984D"/>
+  <path d="M24 24 L42.07 18.13 A19 19 0 1 0 42.07 29.87 Z" fill="#3FAF5A"/>
+  <g stroke="#67CF7A" stroke-width="1.5" stroke-linecap="round" fill="none">
+    <path d="M24 24 L33.5 7.5"/>
+    <path d="M24 24 L14.5 7.5"/>
+    <path d="M24 24 L5 24"/>
+    <path d="M24 24 L14.5 40.5"/>
+    <path d="M24 24 L33.5 40.5"/>
+  </g>
+  <circle cx="24" cy="24" r="2.6" fill="#67CF7A" opacity="0.8"/>
+  <ellipse cx="16.5" cy="15.5" rx="7" ry="4" fill="#FFFFFF" opacity="0.2" transform="rotate(-32 16.5 15.5)"/>
+  <circle cx="31" cy="31" r="2.2" fill="#FFFFFF" opacity="0.45"/>
+  <circle cx="30.3" cy="30.3" r="0.8" fill="#FFFFFF" opacity="0.8"/>
+</svg>
