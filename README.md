@@ -1,4 +1,5 @@
 # Ribbit Rush
+Play it: https://robindally.github.io/ribbit-rush/
 
 A browser reimagining of the classic hop-across-traffic-and-rivers game. Guide a frog from the
 start bank, across five lanes of traffic, over a river on logs and turtles, and into one of five
